@@ -9,7 +9,7 @@
       </div>
       
       <div class="mb-3 d-flex justify-content-between">
-        <input type="file" class="form-control" @change="handleFileUpload" />
+        <input type="file" class="form-control" @change="handleFileUpload"/>
         <button class="btn btn-primary ms-2" @click="ejecutar">Ejecutar</button>
         <button class="btn btn-danger ms-2" @click="limpiar">Limpiar</button>
       </div>
@@ -42,7 +42,10 @@ export default {
       }
     },
     ejecutar() {
+      //Lo que se manda al backend iria aquí
       this.salida = "Ejecutando comandos...\n";
+      //lo que se obtiene en el output
+
       setTimeout(() => {
         this.salida += "Comando ejecutado con éxito.\n";
       }, 1000);
@@ -57,7 +60,6 @@ export default {
 
 <style>
 @import "https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css";
-
 #app {
   max-width: 700px;
   margin: auto;
