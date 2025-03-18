@@ -1,12 +1,12 @@
 package analizador
 
 import (
-	"errors"  // Importa el paquete "errors" para manejar errores
-	"fmt"     // Importa el paquete "fmt" para formatear e imprimir texto
-	"strings" // Importa el paquete "strings" para manipulación de cadenas
+	"errors"
+	"fmt"
+	"strings"
 )
 
-// Analizador de los comandos de entrada que ejecuta todo como corresponde
+// La función que realiza el análisis y ejecuta los comandos
 func Analizador(input string) (interface{}, error) {
 
 	//Comienzo dividiendo los tokens del análisis léxico
@@ -31,6 +31,15 @@ func Analizador(input string) (interface{}, error) {
 		return nil, nil
 
 	case "mount":
+		return nil, nil
+
+	case "mkfs":
+		return nil, nil
+
+	case "rep":
+		return nil, nil
+
+	case "mkdir":
 		return nil, nil
 
 	default:
