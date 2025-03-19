@@ -1,0 +1,36 @@
+# Manual Técnico - Proyecto 1
+## Objetivos
+### Objetivo General
+- Proporcionar una explicación detallada sobre la implementación del código, la lógica utilizada y las bases para el mantenimiento futuro del programa.
+### Objetivos Específicos
+- Presentar y explicar el funcionamiento del código que implementa la solución desarrollada.
+- Detallar el proceso de diseño de las soluciones y la lógica detrás de cada una de ellas.
+
+## Alcances del Sistema
+
+Este manual tiene la finalidad de brindar
+
+## Especificaciones técnicas
+### Requisitos de Hardware
+- Memoria RAM de 2GB
+- Espacio libre en el disco duro de 1GB
+- Procesador de 1GHz o superior
+- Pantalla
+- Teclado
+- Mouse (opcional)
+### Requisitos de Software 
+- Sistema operativo compatible con JDK
+- Editor de texto o IDE compatible que permita trabajar con java (se recomienda netBeans)
+- Tener instalado JDK
+
+### Descripción de la arquitectura del programa
+
+
+
+
+### Explicación de las estructuras de datos
+
+
+
+
+### Descripción de los comandos implementados
