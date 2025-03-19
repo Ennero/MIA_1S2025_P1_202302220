@@ -18,7 +18,6 @@ Part Status:
 	N: Disponible
 	0: Creado
 	1: Montado
-
 Esto queda a su criterio.
 */
 

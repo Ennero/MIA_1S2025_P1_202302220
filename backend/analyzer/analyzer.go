@@ -37,6 +37,9 @@ func Analyzer(input string) (interface{}, error) {
 	case "mkdir":
 		// Llama a la función CommandMkdir del paquete commands con los argumentos restantes
 		return commands.ParseMkdir(tokens[1:])
+	case "rmdisk":
+		// Llama a la función CommandRmdisk del paquete commands con los argumentos restantes
+		return commands.ParseRmdisk(tokens[1:])
 	default:
 		// Si el comando no es reconocido, devuelve un error
 		return nil, fmt.Errorf("comando desconocido: %s", tokens[0])

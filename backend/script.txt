@@ -1,0 +1,17 @@
+mkdisk -size=5 -unit=M -fit=WF -path="/home/enner/Escritorio/Proyecto1/MIA_1S2025_P1_202302220/backend/disks/DiscoLab.mia" //coso para crear
+rmdisk -path="/home/enner/Escritorio/Proyecto1/MIA_1S2025_P1_202302220/backend/disks/DiscoLab.mia"  //coso para eliminar
+
+fdisk -size=1 -type=P -unit=M -fit=BF -name="Particion1" -path="/home/enner/Escritorio/Proyecto1/MIA_1S2025_P1_202302220/backend/disks/DiscoLab.mia"
+
+mount -name="Particion1" -path="/home/enner/Escritorio/Proyecto1/MIA_1S2025_P1_202302220/backend/disks/DiscoLab.mia"
+
+mkfs -id=531A
+
+mkdir -path="/home"
+mkdir -path="/home/usac"
+mkdir -path="/home/work"
+mkdir -path="/home/usac/mia"
+
+rep -id=531A -path="/home/enner/Escritorio/Proyecto1/MIA_1S2025_P1_202302220/backend/output/report_mbr.png" -name=mbr
+rep -id=531A -path="/home/enner/Escritorio/Proyecto1/MIA_1S2025_P1_202302220/backend/output/report_inode.png" -name=inode
+rep -id=531A -path="/home/enner/Escritorio/Proyecto1/MIA_1S2025_P1_202302220/backend/output/report_bm_inode.txt" -name=bm_inode
