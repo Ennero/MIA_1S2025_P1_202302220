@@ -116,7 +116,7 @@ func ParseFdisk(tokens []string) (*FDISK, error) {
 
 	// Si no se proporcionó el ajuste, se establece por defecto a "FF"
 	if cmd.fit == "" {
-		cmd.fit = "WF"
+		cmd.fit = "FF"
 	}
 
 	// Si no se proporcionó el tipo, se establece por defecto a "P"

@@ -34,12 +34,11 @@ func ReportMBR(mbr *structures.MBR, path string) error {
 
 	// Agregar las particiones a la tabla
 	for i, part := range mbr.Mbr_partitions {
-		/*
-			// Continuar si el tamaño de la partición es -1 (o sea, no está asignada)
-			if part.Part_size == -1 {
-				continue
-			}
-		*/
+
+		// Continuar si el tamaño de la partición es -1 (o sea, no está asignada)
+		if part.Part_size == -1 {
+			continue
+		}
 
 		// Convertir Part_name a string y eliminar los caracteres nulos
 		partName := strings.TrimRight(string(part.Part_name[:]), "\x00")

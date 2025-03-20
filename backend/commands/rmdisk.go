@@ -83,5 +83,7 @@ func commandRmdisk(rmdisk *RMDISK) error {
 		return fmt.Errorf("error al eliminar el archivo %s: %v", rmdisk.path, err)
 	}
 
+	fmt.Printf("Disco %s eliminado exitosamente.\n", rmdisk.path)
+
 	return nil
 }

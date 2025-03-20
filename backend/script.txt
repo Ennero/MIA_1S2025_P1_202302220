@@ -1,5 +1,5 @@
-mkdisk -size=5 -unit=M -fit=WF -path="/home/enner/Escritorio/Proyecto1/MIA_1S2025_P1_202302220/backend/disks/DiscoLab.mia" //coso para crear
-rmdisk -path="/home/enner/Escritorio/Proyecto1/MIA_1S2025_P1_202302220/backend/disks/DiscoLab.mia"  //coso para eliminar
+mkdisk -size=5 -unit=M -fit=WF -path="/home/enner/Escritorio/Proyecto1/MIA_1S2025_P1_202302220/backend/disks/DiscoLab.mia"
+rmdisk -path="/home/enner/Escritorio/Proyecto1/MIA_1S2025_P1_202302220/backend/disks/DiscoLab.mia"
 
 fdisk -size=1 -type=P -unit=M -fit=BF -name="Particion1" -path="/home/enner/Escritorio/Proyecto1/MIA_1S2025_P1_202302220/backend/disks/DiscoLab.mia"
 
