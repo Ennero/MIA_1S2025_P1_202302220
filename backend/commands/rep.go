@@ -106,7 +106,7 @@ func commandRep(rep *REP) error {
 	// Switch para manejar diferentes tipos de reportes
 	switch rep.name {
 	case "mbr":
-		err = reports.ReportMBR(mountedMbr, rep.path)
+		err = reports.ReportMBR(mountedMbr, mountedDiskPath, rep.path)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 		}
