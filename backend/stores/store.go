@@ -6,7 +6,7 @@ import (
 )
 
 // Carnet de estudiante
-const Carnet string = "53" // 202113553
+const Carnet string = "20" // 202302220
 
 // Declaración de variables globales
 var (

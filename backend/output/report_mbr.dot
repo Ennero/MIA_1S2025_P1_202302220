@@ -1,31 +1,17 @@
 digraph G {
-        node [shape=plaintext]
-        tabla [label=<
-            <table border="0" cellborder="1" cellspacing="0">
-                <tr><td colspan="2" bgcolor="gray"><b> REPORTE MBR </b></td></tr>
-                <tr><td><b>mbr_tamano</b></td><td>5242880</td></tr>
-                <tr><td><b>mbr_fecha_creacion</b></td><td>2025-03-19 22:13:52 -0600 CST</td></tr>
-                <tr><td><b>mbr_disk_signature</b></td><td>1604010104</td></tr>
-            
-				<tr><td colspan="2" bgcolor="lightblue"><b> PARTICIÓN 1 </b></td></tr>
-				<tr><td><b>part_status</b></td><td>1</td></tr>
-				<tr><td><b>part_type</b></td><td>P</td></tr>
-				<tr><td><b>part_fit</b></td><td>B</td></tr>
-				<tr><td><b>part_start</b></td><td>153</td></tr>
-				<tr><td><b>part_size</b></td><td>1048576</td></tr>
-				<tr><td><b>part_name</b></td><td>Particion1</td></tr>
-			
-				<tr><td colspan="2" bgcolor="orange"><b> PARTICIÓN 2 </b></td></tr>
-				<tr><td><b>part_status</b></td><td>0</td></tr>
-				<tr><td><b>part_type</b></td><td>E</td></tr>
-				<tr><td><b>part_fit</b></td><td>B</td></tr>
-				<tr><td><b>part_start</b></td><td>1048729</td></tr>
-				<tr><td><b>part_size</b></td><td>1048576</td></tr>
-				<tr><td><b>part_name</b></td><td>Particion2</td></tr>
-			<tr><td colspan="2"><b>Particiones Lógicas</b></td></tr>
-					<tr><td bgcolor="lightgreen"><b>EBR</b></td><td bgcolor="lightgreen"><b>Partición Lógica</b></td></tr>
-					<tr><td><b>part_start</b></td><td>1048759</td></tr>
-					<tr><td><b>part_size</b></td><td>1024</td></tr>
-					<tr><td><b>part_fit</b></td><td>B</td></tr>
-					<tr><td><b>part_name</b></td><td>Particion3</td></tr>
-				</table>>] }
+    node [shape=plaintext]
+    tabla [label=<
+        <table border="0" cellborder="1" cellspacing="0">
+            <tr><td colspan="2" bgcolor="gray"><b> REPORTE MBR </b></td></tr>
+            <tr><td bgcolor="lightgray"><b>mbr_tamano</b></td><td>5242880</td></tr>
+            <tr><td bgcolor="lightgray"><b>mbr_fecha_creacion</b></td><td>2025-03-19 23:09:20 -0600 CST</td></tr>
+            <tr><td bgcolor="lightgray"><b>mbr_disk_signature</b></td><td>607493053</td></tr>
+        
+        <tr><td colspan="2" bgcolor="lightblue"><b> PARTICIÓN 1 </b></td></tr>
+        <tr><td bgcolor="lightgray"><b>part_status</b></td><td>1</td></tr>
+        <tr><td bgcolor="lightgray"><b>part_type</b></td><td>P</td></tr>
+        <tr><td bgcolor="lightgray"><b>part_fit</b></td><td>B</td></tr>
+        <tr><td bgcolor="lightgray"><b>part_start</b></td><td>153</td></tr>
+        <tr><td bgcolor="lightgray"><b>part_size</b></td><td>1048576</td></tr>
+        <tr><td bgcolor="lightgray"><b>part_name</b></td><td>Particion1</td></tr>
+    </table>>] }

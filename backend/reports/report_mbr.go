@@ -24,14 +24,14 @@ func ReportMBR(mbr *structures.MBR, diskPath string, outputPath string) error {
 
 	// Iniciar el contenido DOT con una tabla
 	dotContent := fmt.Sprintf(`digraph G {
-        node [shape=plaintext]
-        tabla [label=<
-            <table border="0" cellborder="1" cellspacing="0">
-                <tr><td colspan="2" bgcolor="gray"><b> REPORTE MBR </b></td></tr>
-                <tr><td><b>mbr_tamano</b></td><td>%d</td></tr>
-                <tr><td><b>mbr_fecha_creacion</b></td><td>%s</td></tr>
-                <tr><td><b>mbr_disk_signature</b></td><td>%d</td></tr>
-            `, mbr.Mbr_size, time.Unix(int64(mbr.Mbr_creation_date), 0), mbr.Mbr_disk_signature)
+    node [shape=plaintext]
+    tabla [label=<
+        <table border="0" cellborder="1" cellspacing="0">
+            <tr><td colspan="2" bgcolor="gray"><b> REPORTE MBR </b></td></tr>
+            <tr><td bgcolor="lightgray"><b>mbr_tamano</b></td><td>%d</td></tr>
+            <tr><td bgcolor="lightgray"><b>mbr_fecha_creacion</b></td><td>%s</td></tr>
+            <tr><td bgcolor="lightgray"><b>mbr_disk_signature</b></td><td>%d</td></tr>
+        `, mbr.Mbr_size, time.Unix(int64(mbr.Mbr_creation_date), 0), mbr.Mbr_disk_signature)
 
 	// Iterar sobre las particiones
 	for i, part := range mbr.Mbr_partitions {
@@ -59,18 +59,18 @@ func ReportMBR(mbr *structures.MBR, diskPath string, outputPath string) error {
 
 		// Agregar la partición a la tabla
 		dotContent += fmt.Sprintf(`
-				<tr><td colspan="2" bgcolor="%s"><b> PARTICIÓN %d </b></td></tr>
-				<tr><td><b>part_status</b></td><td>%c</td></tr>
-				<tr><td><b>part_type</b></td><td>%c</td></tr>
-				<tr><td><b>part_fit</b></td><td>%c</td></tr>
-				<tr><td><b>part_start</b></td><td>%d</td></tr>
-				<tr><td><b>part_size</b></td><td>%d</td></tr>
-				<tr><td><b>part_name</b></td><td>%s</td></tr>
-			`, color, i+1, partStatus, partType, partFit, part.Part_start, part.Part_size, partName)
+        <tr><td colspan="2" bgcolor="%s"><b> PARTICIÓN %d </b></td></tr>
+        <tr><td bgcolor="lightgray"><b>part_status</b></td><td>%c</td></tr>
+        <tr><td bgcolor="lightgray"><b>part_type</b></td><td>%c</td></tr>
+        <tr><td bgcolor="lightgray"><b>part_fit</b></td><td>%c</td></tr>
+        <tr><td bgcolor="lightgray"><b>part_start</b></td><td>%d</td></tr>
+        <tr><td bgcolor="lightgray"><b>part_size</b></td><td>%d</td></tr>
+        <tr><td bgcolor="lightgray"><b>part_name</b></td><td>%s</td></tr>
+    `, color, i+1, partStatus, partType, partFit, part.Part_start, part.Part_size, partName)
 
 		// Si es una partición extendida, buscar sus particiones lógicas
 		if partType == 'E' {
-			dotContent += `<tr><td colspan="2"><b>Particiones Lógicas</b></td></tr>`
+			dotContent += `<tr><td colspan="2" bgcolor="lightgreen"><b> Particiones Lógicas </b></td></tr>`
 
 			// Abrir el archivo para leer los EBRs
 			file, err := os.Open(diskPath)
@@ -96,10 +96,10 @@ func ReportMBR(mbr *structures.MBR, diskPath string, outputPath string) error {
 				// Agregar la partición lógica a la tabla
 				dotContent += fmt.Sprintf(`
 					<tr><td bgcolor="lightgreen"><b>EBR</b></td><td bgcolor="lightgreen"><b>Partición Lógica</b></td></tr>
-					<tr><td><b>part_start</b></td><td>%d</td></tr>
-					<tr><td><b>part_size</b></td><td>%d</td></tr>
-					<tr><td><b>part_fit</b></td><td>%c</td></tr>
-					<tr><td><b>part_name</b></td><td>%s</td></tr>
+                <tr><td bgcolor="lightgray"><b>part_start</b></td><td>%d</td></tr>
+                <tr><td bgcolor="lightgray"><b>part_size</b></td><td>%d</td></tr>
+                <tr><td bgcolor="lightgray"><b>part_fit</b></td><td>%c</td></tr>
+                <tr><td bgcolor="lightgray"><b>part_name</b></td><td>%s</td></tr>
 				`, ebr.Part_start, ebr.Part_size, logicalFit, logicalName)
 
 				// Pasar al siguiente EBR
@@ -114,6 +114,8 @@ func ReportMBR(mbr *structures.MBR, diskPath string, outputPath string) error {
 
 	// Cerrar la tabla y el contenido DOT
 	dotContent += "</table>>] }"
+
+
 
 	// Guardar el contenido DOT en un archivo
 	file, err := os.Create(dotFileName)
