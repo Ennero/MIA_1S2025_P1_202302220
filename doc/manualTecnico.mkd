@@ -19,9 +19,9 @@ Este manual tiene la finalidad de brindar
 - Teclado
 - Mouse (opcional)
 ### Requisitos de Software 
-- Sistema operativo compatible con JDK
-- Editor de texto o IDE compatible que permita trabajar con java (se recomienda netBeans)
-- Tener instalado JDK
+- Sistema operativo compatible con Go (Windows, macOS, Linux, etc.)
+- Editor de texto o IDE compatible que permita trabajar con go (se recomienda VScode)
+- Tener el compilador de golang
 
 ### Descripción de la arquitectura del programa
 
@@ -29,7 +29,19 @@ Este manual tiene la finalidad de brindar
 
 
 ### Explicación de las estructuras de datos
+Para la creación de este proyecto, se usaron estructuras de vital importancia para los sistemas de archivos entre los cuales están MBR, EBR, inodos y bloques.
 
+#### Estructura MBR
+La estructura MBR se crea junto a un nuevo disco, que en este proyecto es el archivo de la extensión .mia.
+Este contiene dentro de sí la información de todas las particiones del sistema de archivos, por lo que se encuentra en el primer sector del disco. Este contiene la siguiente información:
+- Tamaño del disco en byte
+- Fecha de creación del disco
+- Un número único que lo identifica
+- Un ajuste del tipo de partición
+- Información de las cuatro particiones capaces de contener en sí
+
+
+#### 
 
 
 
