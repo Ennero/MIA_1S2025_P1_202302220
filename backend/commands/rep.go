@@ -132,6 +132,11 @@ func commandRep(rep *REP) error {
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 		}
+	case "disk":
+		err = reports.ReportDisk(mountedMbr, mountedDiskPath, rep.path)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+		}
 	}
 
 	return nil

@@ -127,3 +127,9 @@ func SplitStringIntoChunks(s string) []string {
 	}
 	return chunks
 }
+
+
+//Función para obtener el nombre del disco
+func GetDiskName(path string) (string) {
+	return filepath.Base(path)
+}

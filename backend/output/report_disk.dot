@@ -1,0 +1,35 @@
+digraph G {
+	node [shape=none];
+	graph [splines=false];
+	subgraph cluster_disk {
+		label="DiscoLab.mia";
+		style=filled;
+		fillcolor=white;
+		color=black;
+		penwidth=2;
+		table [label=<
+			<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="15" WIDTH="800">
+			<TR>
+			<TD BGCOLOR="gray" ALIGN="CENTER"><B>MBR</B></TD>
+			<TD BGCOLOR="lightblue" WIDTH="160" ALIGN="CENTER"><B>Primaria</B><BR/><B>Particion1</B><BR/>20.00% del disco</TD>
+			<TD BGCOLOR="orange" WIDTH="160" ALIGN="CENTER" CELLPADDING="0">
+				<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="5" WIDTH="100%">
+				<TR><TD COLSPAN="100" ALIGN="CENTER"><B>Extendida</B></TD></TR>
+				<TR>
+				<TD BGCOLOR="gray" ALIGN="CENTER" BORDER="1"><B>EBR</B></TD>
+				<TD BGCOLOR="lightgreen" ALIGN="CENTER" BORDER="1"><B>Lógica</B><BR/>Particion3<BR/>0.02%</TD>
+				<TD BGCOLOR="gray" ALIGN="CENTER" BORDER="1"><B>EBR</B></TD>
+				<TD BGCOLOR="lightgreen" ALIGN="CENTER" BORDER="1"><B>Lógica</B><BR/>Particion4<BR/>0.02%</TD>
+				<TD BGCOLOR="gray" ALIGN="CENTER" BORDER="1"><B>EBR</B></TD>
+				<TD BGCOLOR="lightgreen" ALIGN="CENTER" BORDER="1"><B>Lógica</B><BR/>Particion5<BR/>0.02%</TD>
+				<TD BGCOLOR="gray" ALIGN="CENTER" BORDER="1"><B>EBR</B></TD>
+				</TR>
+				</TABLE>
+			</TD>
+			<TD BGCOLOR="lightblue" WIDTH="160" ALIGN="CENTER"><B>Primaria</B><BR/><B>Particion6</B><BR/>20.00% del disco</TD>
+			<TD BGCOLOR="#F5F5F5" WIDTH="479" ALIGN="CENTER"><B>Libre</B><BR/>59.94% del disco</TD>
+			</TR>
+			</TABLE>
+>];
+	}
+}

@@ -4,8 +4,8 @@ digraph G {
         <table border="0" cellborder="1" cellspacing="0">
             <tr><td colspan="2" bgcolor="gray"><b> REPORTE MBR </b></td></tr>
             <tr><td bgcolor="lightgray"><b>mbr_tamano</b></td><td>5242880</td></tr>
-            <tr><td bgcolor="lightgray"><b>mbr_fecha_creacion</b></td><td>2025-03-22 23:09:20 -0600 CST</td></tr>
-            <tr><td bgcolor="lightgray"><b>mbr_disk_signature</b></td><td>558418334</td></tr>
+            <tr><td bgcolor="lightgray"><b>mbr_fecha_creacion</b></td><td>2025-03-23 10:36:16 -0600 CST</td></tr>
+            <tr><td bgcolor="lightgray"><b>mbr_disk_signature</b></td><td>1812913296</td></tr>
         
         <tr><td colspan="2" bgcolor="lightblue"><b> PARTICIÓN 1 </b></td></tr>
         <tr><td bgcolor="lightgray"><b>part_status</b></td><td>1</td></tr>
@@ -28,22 +28,4 @@ digraph G {
                 <tr><td bgcolor="lightgray"><b>part_size</b></td><td>1024</td></tr>
                 <tr><td bgcolor="lightgray"><b>part_fit</b></td><td>B</td></tr>
                 <tr><td bgcolor="lightgray"><b>part_name</b></td><td>Particion3</td></tr>
-				
-					<tr><td bgcolor="lightgreen"><b>EBR</b></td><td bgcolor="lightgreen"><b>Partición Lógica</b></td></tr>
-                <tr><td bgcolor="lightgray"><b>part_start</b></td><td>1049813</td></tr>
-                <tr><td bgcolor="lightgray"><b>part_size</b></td><td>1024</td></tr>
-                <tr><td bgcolor="lightgray"><b>part_fit</b></td><td>B</td></tr>
-                <tr><td bgcolor="lightgray"><b>part_name</b></td><td>Particion4</td></tr>
-				
-					<tr><td bgcolor="lightgreen"><b>EBR</b></td><td bgcolor="lightgreen"><b>Partición Lógica</b></td></tr>
-                <tr><td bgcolor="lightgray"><b>part_start</b></td><td>1050867</td></tr>
-                <tr><td bgcolor="lightgray"><b>part_size</b></td><td>1024</td></tr>
-                <tr><td bgcolor="lightgray"><b>part_fit</b></td><td>B</td></tr>
-                <tr><td bgcolor="lightgray"><b>part_name</b></td><td>Particion5</td></tr>
-				
-					<tr><td bgcolor="lightgreen"><b>EBR</b></td><td bgcolor="lightgreen"><b>Partición Lógica</b></td></tr>
-                <tr><td bgcolor="lightgray"><b>part_start</b></td><td>1051921</td></tr>
-                <tr><td bgcolor="lightgray"><b>part_size</b></td><td>1024</td></tr>
-                <tr><td bgcolor="lightgray"><b>part_fit</b></td><td>B</td></tr>
-                <tr><td bgcolor="lightgray"><b>part_name</b></td><td>Particion6</td></tr>
 				</table>>] }
