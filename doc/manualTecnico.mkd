@@ -41,7 +41,10 @@ Este contiene dentro de sí la información de todas las particiones del sistema
 - Información de las cuatro particiones capaces de contener en sí
 
 
-#### 
+#### Estructura Inodo
+
+
+#### Estructura 
 
 
 

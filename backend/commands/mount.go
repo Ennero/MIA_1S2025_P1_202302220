@@ -114,6 +114,14 @@ func commandMount(mount *MOUNT) error {
 	fmt.Println("\nPartición disponible:")
 	partition.PrintPartition()
 
+	//Aquí verifico si no se montó antes
+	for _, valor:= range stores.ListPatitions{
+		if valor == mount.name{
+			fmt.Println("Error: la partición ya está montada")
+			return errors.New("la partición ya está montada")
+		}
+	}
+
 	// Generar un id único para la partición
 	idPartition, partitionCorrelative, err := generatePartitionID(mount)
 	if err != nil {
@@ -121,8 +129,12 @@ func commandMount(mount *MOUNT) error {
 		return err
 	}
 
+
+
 	//  Guardar la partición montada en la lista de montajes globales
 	stores.MountedPartitions[idPartition] = mount.path
+	stores.ListPatitions = append(stores.ListPatitions, mount.name)
+	stores.ListMounted = append(stores.ListMounted, idPartition)
 
 	// Modificamos la partición para indicar que está montada
 	partition.MountPartition(partitionCorrelative, idPartition)

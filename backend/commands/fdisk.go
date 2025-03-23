@@ -130,6 +130,7 @@ func ParseFdisk(tokens []string) (string, error) {
 	err := commandFdisk(cmd)
 	if err != nil {
 		fmt.Println("Error:", err)
+		return "", err
 	}
 
 	// Devuelve un mensaje de éxito con los detalles de la partición creada
@@ -154,14 +155,25 @@ func commandFdisk(fdisk *FDISK) error {
 	case "P":
 		// Crear partición primaria
 		err = createPrimaryPartition(fdisk, sizeBytes)
+		if err != nil {
+			fmt.Println("Error creando partición primaria:", err)
+			return err
+		}
 	case "E":
 		// Crear partición extendida
 		err = createExtendedPartition(fdisk, sizeBytes)
+		if err != nil {
+			fmt.Println("Error creando partición primaria:", err)
+			return err
+		}
 	case "L":
 		// Crear partición lógica
 		err = createLogicalPartition(fdisk, sizeBytes)
+		if err != nil {
+			fmt.Println("Error creando partición primaria:", err)
+			return err
+		}
 	}
-
 	if err != nil {
 		fmt.Println("Error creando partición:", err)
 		return err
@@ -193,6 +205,14 @@ func createPrimaryPartition(fdisk *FDISK, sizeBytes int) error {
 		fmt.Println("No hay particiones disponibles.")
 	}
 
+	for _, partitionName := range mbr.GetPartitionNames() {
+		if partitionName == fdisk.name {
+			fmt.Println("Ya existe una partición con el nombre especificado.")
+			return errors.New("ya existe una partición con el nombre especificado")
+		}
+	}
+
+
 	/* SOLO PARA VERIFICACIÓN */
 	// Print para verificar que la partición esté disponible
 	fmt.Println("\nPartición disponible:")
@@ -219,7 +239,6 @@ func createPrimaryPartition(fdisk *FDISK, sizeBytes int) error {
 	if err != nil {
 		fmt.Println("Error:", err)
 	}
-
 	return nil
 }
 
@@ -247,6 +266,15 @@ func createExtendedPartition(fdisk *FDISK, sizeBytes int) error {
 	if availablePartition == nil {
 		return errors.New("no hay espacio disponible para la partición extendida")
 	}
+
+
+	for _, partitionName := range mbr.GetPartitionNames() {
+		if partitionName == fdisk.name {
+			fmt.Println("Ya existe una partición con el nombre especificado.")
+			return errors.New("ya existe una partición con el nombre especificado")
+		}
+	}
+
 
 	// Crear la partición extendida
 	availablePartition.CreatePartition(startPartition, sizeBytes, "E", fdisk.fit, fdisk.name)
@@ -306,6 +334,7 @@ func createLogicalPartition(fdisk *FDISK, sizeBytes int) error {
     var lastEBRPosition int32 = -1
     var isFirstEBR bool = true
 
+	//Comienzo con el ciclo para irme moviendo :)
     for {
         // Moverse al offset actual
         file.Seek(int64(currentEBRPosition), 0)

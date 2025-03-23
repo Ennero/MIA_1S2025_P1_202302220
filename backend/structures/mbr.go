@@ -74,6 +74,8 @@ func (mbr *MBR) GetFirstAvailablePartition() (*Partition, int, int) {
 	// Recorrer las particiones del MBR
 	for i := 0; i < len(mbr.Mbr_partitions); i++ {
 		// Si el start de la partición es -1, entonces está disponible
+
+
 		if mbr.Mbr_partitions[i].Part_start == -1 {
 			// Devolver la partición, el offset y el índice
 			return &mbr.Mbr_partitions[i], offset, i
@@ -82,8 +84,26 @@ func (mbr *MBR) GetFirstAvailablePartition() (*Partition, int, int) {
 			offset += int(mbr.Mbr_partitions[i].Part_size)
 		}
 	}
+	//Se retorna nulo si se recorrieron los 4 y no pasó nada
 	return nil, -1, -1
 }
+
+
+//Método para obtener una lista de los nombres de las particiones
+func (mbr *MBR) GetPartitionNames() []string {
+	// Crear una lista de nombres de particiones
+	partitionNames := make([]string, 0)
+
+	// Recorrer las particiones del MBR
+	for _, partition := range mbr.Mbr_partitions {
+		// Convertir Part_name a string y eliminar los caracteres nulos
+		partitionName := strings.Trim(string(partition.Part_name[:]), "\x00 ")
+		// Agregar el nombre de la partición a la lista
+		partitionNames = append(partitionNames, partitionName)
+	}
+	return partitionNames
+}
+
 
 // Método para obtener una partición por nombre
 func (mbr *MBR) GetPartitionByName(name string) (*Partition, int) {

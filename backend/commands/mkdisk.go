@@ -216,6 +216,5 @@ func createMBR(mkdisk *MKDISK, sizeBytes int) error {
 	if err != nil {
 		fmt.Println("Error:", err)
 	}
-
 	return nil
 }

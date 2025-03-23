@@ -13,6 +13,12 @@ var (
 	MountedPartitions map[string]string = make(map[string]string)
 )
 
+//Lista para saber si ya se montó alguna particion
+var ListPatitions []string = make([]string, 0)
+
+//Esta función es para el mounted xd
+var ListMounted []string = make([]string, 0)
+
 // GetMountedPartition obtiene la partición montada con el id especificado
 func GetMountedPartition(id string) (*structures.Partition, string, error) {
 	// Obtener el path de la partición montada

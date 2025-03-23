@@ -74,7 +74,7 @@ func ParseRmdisk(tokens []string) (string, error) {
 func commandRmdisk(rmdisk *RMDISK) error {
 
 	if _, err := os.Stat(rmdisk.path); os.IsNotExist(err) {
-		return fmt.Errorf("error: el archivo %s no existe", rmdisk.path)
+		return fmt.Errorf("no existe el archivo %s", rmdisk.path)
 	}
 
 	// Intentar eliminar el archivo
