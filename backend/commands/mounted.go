@@ -16,8 +16,6 @@ func ParseMounted(tokens []string) (string, error) {
 }
 
 func commandMounted() (string, error){
-
-
 	if len(stores.ListMounted) == 0 {
 		return "", errors.New("no hay particiones montadas")
 	}

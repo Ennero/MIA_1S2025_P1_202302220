@@ -93,7 +93,7 @@ type EBR struct {
 	Part_name    [16]byte // Nombre de la partición
 }
 ```
-#### Inodo
+#### INODO
 Los inodos son estructuras fundamentales en el sistema de archivos EXT2, encargadas de almacenar la información de archivos y carpetas. Cada inodo contiene metadatos sobre un archivo o directorio, pero no almacena directamente su contenido. Un inodo incluye la siguiente información:
 
 - Tipo de archivo (archivo regular, directorio, enlace simbólico, etc.).
@@ -124,7 +124,7 @@ type Inode struct {
 }
 ```
 
-#### SuperBlock
+#### SUPERBLOCK
 El SuperBlock es una estructura clave del sistema de archivos EXT2. Contiene la información principal sobre el sistema de archivos y se encuentra al inicio de cada partición formateada con EXT2. Contiene la siguiente información:
 - Tamaño total del sistema de archivos.
 - Número total de inodos y bloques.
@@ -156,14 +156,14 @@ type SuperBlock struct {
 ```
 Basicamente porporciona información general del sistema de archivos.
 
-#### Bitmap
+#### BITMAP
 Los bitmaps se usan para llevar el control de los bloques e inodos ocupados o libres dentro del sistema de archivos. Se almacenan en forma de bits y están divididos en dos tipos:
 - Bitmap de inodos: Indica qué inodos están en uso o libres.
 - Bitmap de bloques: Indica qué bloques de datos están ocupados o libres.
 
  Basciamente es un registros de inodos y bloques ocupados/libres.
   
-#### PointerBlock
+#### POINTERBLOCK
 El PointerBlock es una estructura que almacena direcciones de bloques de datos. Se utiliza para gestionar archivos o carpetas grandes que requieren más de un bloque de almacenamiento. Puede contener:
 - Punteros directos a bloques de datos.
 - Punteros indirectos a otros PointerBlocks (para estructuras más grandes).
@@ -173,7 +173,7 @@ type PointerBlock struct {
 	// Total: 64 bytes
 }
 ```
-#### Partition
+#### PARTITION
 La Partition es una división dentro del disco que puede contener un sistema de archivos. Existen tres tipos en este proyecto:
 - Primaria: Contiene directamente un sistema de archivos.
 - Extendida: Puede contener múltiples particiones lógicas.
@@ -197,7 +197,7 @@ type Partition struct {
 }
 ```
 
-#### FolderBlock
+#### FOLDERBLOCK
 El FolderBlock almacena la información de una carpeta dentro del sistema de archivos. Contiene una lista de entradas que pueden ser archivos o subcarpetas. Cada entrada almacena:
 - Nombre de la carpeta o archivo.
 - Número de inodo asociado.
@@ -217,7 +217,7 @@ type FolderContent struct {
 }
 ```
 
-#### FileBlock
+#### FILEBLOCK
 El FileBlock almacena datos de un archivo en bloques de tamaño fijo. Cada FileBlock es parte de la estructura de un archivo y contiene:
 - Datos del archivo en formato binario.
 - Punteros a otros FileBlocks si el archivo es grande.
@@ -231,57 +231,362 @@ type FileBlock struct {
 ### Descripción de los comandos implementados
 Los comando utilizado para la ejecución de todo el proceso fueron los siguiente:
 
-#### mdisk
+#### MKDISK
 Este comando se utiliza para crear un archivo binario que simula un disco duro físico.  Al crearlo, se especifica el tamaño, la unidad de medida (KB, MB), el tipo de ajuste para las particiones (Best Fit, First Fit, Worst Fit) y la ruta donde se guardará el archivo.  El archivo binario se inicializa llenándolo con ceros binarios, representando el espacio disponible del disco. 
+```go
+func commandMkdisk(mkdisk *MKDISK) error {
+	// Convertir el tamaño a bytes
+	sizeBytes, err := utils.ConvertToBytes(mkdisk.size, mkdisk.unit)
+	if err != nil {
+		fmt.Println("Error converting size:", err)
+		return err
+	}
 
+	// Crear el disco con el tamaño proporcionado
+	err = createDisk(mkdisk, sizeBytes)
+	if err != nil {
+		fmt.Println("Error creating disk:", err)
+		return err
+	}
 
+	// Crear el MBR con el tamaño proporcionado
+	err = createMBR(mkdisk, sizeBytes)
+	if err != nil {
+		fmt.Println("Error creating MBR:", err)
+		return err
+	}
 
-#### fdisk
+	return nil
+}
+```
+
+#### FDISK
 Este comando es fundamental para la administración de particiones dentro de un disco duro virtual.  Permite crear, eliminar o modificar particiones.  Al crear una partición, se pueden especificar parámetros como el tamaño, la unidad de medida, la ruta del disco, el tipo de partición (primaria, extendida o lógica), el algoritmo de ajuste de espacio (Best Fit, First Fit, Worst Fit) y el nombre de la partición.  El sistema debe controlar que se cumplan las reglas de las particiones (máximo 4 particiones primarias o extendidas, solo una extendida por disco, etc.) y mostrar mensajes de error si no se pueden realizar las operaciones.
+```go
+func commandFdisk(fdisk *FDISK) error {
+	// Convertir el tamaño a bytes
+	sizeBytes, err := utils.ConvertToBytes(fdisk.size, fdisk.unit)
+	if err != nil {
+		fmt.Println("Error convirtiendo tamaño:", err)
+		return err
+	}
 
-#### mount
+	switch fdisk.typ {
+	case "P":
+		// Crear partición primaria
+		err = createPrimaryPartition(fdisk, sizeBytes)
+		if err != nil {
+			fmt.Println("Error creando partición primaria:", err)
+			return err
+		}
+	case "E":
+		// Crear partición extendida
+		err = createExtendedPartition(fdisk, sizeBytes)
+		if err != nil {
+			fmt.Println("Error creando partición primaria:", err)
+			return err
+		}
+	case "L":
+		// Crear partición lógica
+		err = createLogicalPartition(fdisk, sizeBytes)
+		if err != nil {
+			fmt.Println("Error creando partición primaria:", err)
+			return err
+		}
+	}
+	if err != nil {
+		fmt.Println("Error creando partición:", err)
+		return err
+	}
+
+	return nil
+}
+```
+
+#### MOUNT
 mite "montar" una partición de un disco en el sistema.  Esto implica hacerla accesible para las operaciones del sistema de archivos.  El comando recibe como parámetros la ruta del disco y el nombre de la partición a montar.  Al montar, se le asigna un ID a la partición y se actualiza su estado en las estructuras de datos.  Es importante tener en cuenta que el montaje se realiza en la memoria RAM, no en el disco.
+```go
+func commandMount(mount *MOUNT) error {
+	// Crear una instancia de MBR
+	var mbr structures.MBR
 
-#### mkfs
+	// Deserializar la estructura MBR desde un archivo binario
+	err := mbr.Deserialize(mount.path)
+	if err != nil {
+		fmt.Println("Error deserializando el MBR:", err)
+		return err
+	}
+
+	// Buscar la partición con el nombre especificado
+	partition, indexPartition := mbr.GetPartitionByName(mount.name)
+	if partition == nil {
+		fmt.Println("Error: la partición no existe")
+		return errors.New("la partición no existe")
+	}
+
+	/* SOLO PARA VERIFICACIÓN */
+	// Print para verificar que la partición se encontró correctamente
+	fmt.Println("\nPartición disponible:")
+	partition.PrintPartition()
+
+	//Aquí verifico si no se montó antes
+	for _, valor:= range stores.ListPatitions{
+		if valor == mount.name{
+			fmt.Println("Error: la partición ya está montada")
+			return errors.New("la partición ya está montada")
+		}
+	}
+
+	// Generar un id único para la partición
+	idPartition, partitionCorrelative, err := generatePartitionID(mount)
+	if err != nil {
+		fmt.Println("Error generando el id de partición:", err)
+		return err
+	}
+
+
+
+	//  Guardar la partición montada en la lista de montajes globales
+	stores.MountedPartitions[idPartition] = mount.path
+	stores.ListPatitions = append(stores.ListPatitions, mount.name)
+	stores.ListMounted = append(stores.ListMounted, idPartition)
+
+	// Modificamos la partición para indicar que está montada
+	partition.MountPartition(partitionCorrelative, idPartition)
+
+	/* SOLO PARA VERIFICACIÓN */
+	// Print para verificar que la partición se haya montado correctamente
+	fmt.Println("\nPartición montada (modificada):")
+	partition.PrintPartition()
+
+	// Guardar la partición modificada en el MBR
+	mbr.Mbr_partitions[indexPartition] = *partition
+
+	// Serializar la estructura MBR en el archivo binario
+	err = mbr.Serialize(mount.path)
+	if err != nil {
+		fmt.Println("Error serializando el MBR:", err)
+		return err
+	}
+
+	return nil
+}
+```
+
+#### MKFS
 Este comando formatea una partición, preparándola para almacenar archivos y directorios.  En este caso, el formateo se realiza con el sistema de archivos EXT2.  Además, crea un archivo llamado "users.txt" en el directorio raíz de la partición, el cual almacenará información sobre los usuarios y grupos del sistema.  Los parámetros que recibe son el ID de la partición a formatear y, opcionalmente, el tipo de formateo (completo). 
+```go
+func commandMkfs(mkfs *MKFS) error {
+	// Obtener la partición montada
+	mountedPartition, partitionPath, err := stores.GetMountedPartition(mkfs.id)
+	if err != nil {
+		return err
+	}
 
-#### rep
+	// Verificar la partición montada
+	fmt.Println("\nPatición montada:")
+	mountedPartition.PrintPartition()
+
+	// Calcular el valor de n
+	n := calculateN(mountedPartition)
+
+	// Verificar el valor de n
+	fmt.Println("\nValor de n:", n)
+
+	// Inicializar un nuevo superbloque
+	superBlock := createSuperBlock(mountedPartition, n)
+
+	// Verificar el superbloque
+	fmt.Println("\nSuperBlock:")
+	superBlock.Print()
+
+	// Crear los bitmaps
+	err = superBlock.CreateBitMaps(partitionPath)
+	if err != nil {
+		return err
+	}
+
+	// Crear archivo users.txt
+	err = superBlock.CreateUsersFile(partitionPath)
+	if err != nil {
+		return err
+	}
+
+	// Verificar superbloque actualizado
+	fmt.Println("\nSuperBlock actualizado:")
+	superBlock.Print()
+
+	// Serializar el superbloque
+	err = superBlock.Serialize(partitionPath, int64(mountedPartition.Part_start))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+```
+
+#### REP
 Este comando genera reportes sobre el sistema de archivos.  Recibe como parámetros el nombre del reporte a generar, la ruta donde se guardará el reporte y el ID de la partición a utilizar.  Algunos reportes pueden recibir parámetros adicionales, como la ruta de un archivo o carpeta.  Los reportes se generan utilizando Graphviz.
+```go
 
-#### mkdir
+```
+
+#### MKDIR
 Crea un nuevo directorio (carpeta).  Es similar a MKFILE, pero para crear carpetas.  Recibe como parámetros la ruta de la carpeta y, opcionalmente, un indicador para crear las carpetas padre en la ruta.
+```go
+func commandMkdir(mkdir *MKDIR) error {
+	// Obtener la partición montada
+	partitionSuperblock, mountedPartition, partitionPath, err := stores.GetMountedPartitionSuperblock(IdPartition)
+	if err != nil {
+		return fmt.Errorf("error al obtener la partición montada: %w", err)
+	}
 
-#### rmdisk
+	// Crear el directorio
+	err = createDirectory(mkdir.path, partitionSuperblock, partitionPath, mountedPartition)
+	if err != nil {
+		err = fmt.Errorf("error al crear el directorio: %w", err)
+	}
+
+	return err
+}
+```
+
+#### RMDISK
 Su función es eliminar un archivo que previamente fue creado para simular un disco duro.  El único parámetro necesario es la ruta del archivo que se desea eliminar.  Si el archivo no existe, el sistema debe mostrar un mensaje de error.  
+```go
+func commandRmdisk(rmdisk *RMDISK) error {
 
-#### mounted
+	if _, err := os.Stat(rmdisk.path); os.IsNotExist(err) {
+		return fmt.Errorf("no existe el archivo %s", rmdisk.path)
+	}
+
+	// Intentar eliminar el archivo
+	err := os.Remove(rmdisk.path)
+	if err != nil {
+		return fmt.Errorf("error al eliminar el archivo %s: %v", rmdisk.path, err)
+	}
+
+	fmt.Printf("Disco %s eliminado exitosamente.\n", rmdisk.path)
+
+	return nil
+}
+```
+
+#### MOUNTED
 Este comando muestra un listado de todas las particiones que han sido montadas en la memoria del sistema.  Generalmente, muestra información como el ID de cada partición montada.  No recibe parámetros.  
+```go
+func commandMounted() (string, error){
+	if len(stores.ListMounted) == 0 {
+		return "", errors.New("no hay particiones montadas")
+	}
 
-#### cat
+	var sb strings.Builder
+	sb.WriteString("Particiones montadas:\n")
+	for _, path := range stores.ListMounted {
+		sb.WriteString(path)
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+```
+
+#### CAT
 Permite mostrar el contenido de uno o varios archivos.  Recibe como parámetro una lista de los archivos cuyo contenido se quiere mostrar.  Si un archivo no existe o el usuario no tiene permisos de lectura, se debe mostrar un mensaje de error.  
+```go
+func commandCat(paths []string) (string, error) {
+    salida := ""
+    _, mountedSb, mountedDiskPath, err := stores.GetMountedPartitionRep(IdPartition)
+    if err != nil {
+        return "", err
+    }
 
-#### login
+    for _, path := range paths {
+		fmt.Println("Buscando path",path)
+
+
+		if !strings.HasPrefix(path, "/") {
+            path = "/" + path
+        }
+
+        inode, err := structures.FindInodeByPath(mountedSb, mountedDiskPath, path)
+        if err != nil {
+            return "", fmt.Errorf("error al buscar inodo: %v", err)
+        }
+
+		//Por si no se encontró el Inodo con el path
+		if inode==nil {
+			return "", fmt.Errorf("no se encontró el archivo")
+		}
+
+
+        if inode.I_type[0] != '1' {
+            return "", fmt.Errorf("'%s' no es un archivo", path)
+        }
+
+        content, err := structures.ReadFileContent(mountedSb, mountedDiskPath, inode)
+        if err != nil {
+            return "", fmt.Errorf("error al leer contenido: %v", err)
+        }
+
+		//Debugenado por si está vacio :)
+		if content=="" {
+			return "", fmt.Errorf("el archivo está vacío")
+		}
+
+        salida += fmt.Sprintf("%s\n", content) // Revisar después si me dan ganas que se vea bonito
+    }
+
+
+    return salida, nil
+}
+```
+
+#### LOGIN
 Se utiliza para iniciar una sesión en el sistema.  Los parámetros requeridos son el nombre de usuario, la contraseña y el ID de la partición en la que se desea iniciar sesión.  El sistema debe verificar que el usuario exista y que la contraseña sea correcta.  No se puede iniciar una nueva sesión sin cerrar la anterior.
+```go
 
-#### logout
+```
+
+#### LOGOUT
 Cierra la sesión activa del usuario.  No recibe parámetros.  Solo se puede ejecutar si hay una sesión activa. 
+```go
 
-#### mkgrp
+```
+
+#### MKGRP
 Crea un nuevo grupo de usuarios.  Este comando solo puede ser ejecutado por el usuario "root".  Recibe como parámetro el nombre del grupo a crear.  El nombre del grupo no puede existir previamente.
+```go
 
-#### rmgrp
+```
+
+#### RMGRP
 Elimina un grupo de usuarios existente.  Solo puede ser ejecutado por el usuario "root".  Recibe como parámetro el nombre del grupo a eliminar.  Si el grupo no existe, se debe mostrar un mensaje de error. 
+```go
 
-#### mkusr
+```
+
+#### MKUSR
 Crea un nuevo usuario.  Solo puede ser ejecutado por el usuario "root".  Los parámetros necesarios son el nombre de usuario, la contraseña y el grupo al que pertenecerá el usuario.  El nombre de usuario no puede existir previamente y el grupo debe existir.  
+```go
 
-#### rmusr
+```
+
+#### RMUSR
 Elimina un usuario existente.  Solo puede ser ejecutado por el usuario "root".  Recibe como parámetro el nombre del usuario a eliminar.  Si el usuario no existe, se debe mostrar un mensaje de error.  
+```go
 
-#### chgrp
+```
+
+#### CHGRP
 Cambia el grupo al que pertenece un usuario.  Solo puede ser ejecutado por el usuario "root".  Los parámetros son el nombre del usuario y el nombre del nuevo grupo.  El usuario y el grupo deben existir.
+```go
 
-#### mkfile
+```
+
+#### MKFILE
 Este comando permite crear un nuevo archivo.  El usuario que ejecuta el comando se convierte en el propietario del archivo.  Los parámetros incluyen la ruta del archivo, y opcionalmente, un indicador para crear las carpetas padre en la ruta, el tamaño del archivo y la ruta de un archivo existente para copiar su contenido. 
+```go
 
+```
 
