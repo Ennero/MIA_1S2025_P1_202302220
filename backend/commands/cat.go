@@ -115,7 +115,7 @@ func commandCat(paths []string) (string, error) {
 			return "", fmt.Errorf("el archivo está vacío")
 		}
 
-        salida += fmt.Sprintf("Contenido de %s:\n%s\n", path, content)
+        salida += fmt.Sprintf("%s\n", content) // Revisar después si me dan ganas que se vea bonito
     }
 
 
