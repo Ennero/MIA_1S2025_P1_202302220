@@ -20,19 +20,19 @@ func ReportDisk(mbr *structures.MBR, diskPath string, outputPath string) error {
 
 	dotFileName, outputImage := utils.GetFileNames(outputPath)
 
-	content := "digraph G {\n"
-	content += "\tnode [shape=none];\n"
-	content += "\tgraph [splines=false];\n"
-	content += "\tsubgraph cluster_disk {\n"
-	content += fmt.Sprintf("\t\tlabel=\"%s\";\n", name)
-	content += "\t\tstyle=filled;\n"
-	content += "\t\tfillcolor=white;\n"
-	content += "\t\tcolor=black;\n"
-	content += "\t\tpenwidth=2;\n"
+	dotContent := "digraph G {\n"
+	dotContent += "\tnode [shape=none];\n"
+	dotContent += "\tgraph [splines=false];\n"
+	dotContent += "\tsubgraph cluster_disk {\n"
+	dotContent += fmt.Sprintf("\t\tlabel=\"%s\";\n", name)
+	dotContent += "\t\tstyle=filled;\n"
+	dotContent += "\t\tfillcolor=white;\n"
+	dotContent += "\t\tcolor=black;\n"
+	dotContent += "\t\tpenwidth=2;\n"
 
-	content += "\t\ttable [label=<\n\t\t\t<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"15\" WIDTH=\"800\">\n"
-	content += "\t\t\t<TR>\n"
-	content += "\t\t\t<TD BGCOLOR=\"gray\" ALIGN=\"CENTER\"><B>MBR</B></TD>\n"
+	dotContent += "\t\ttable [label=<\n\t\t\t<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"15\" WIDTH=\"800\">\n"
+	dotContent += "\t\t\t<TR>\n"
+	dotContent += "\t\t\t<TD BGCOLOR=\"gray\" ALIGN=\"CENTER\"><B>MBR</B></TD>\n"
 
 	var usedSpace int32 = 0
 
@@ -46,15 +46,15 @@ func ReportDisk(mbr *structures.MBR, diskPath string, outputPath string) error {
 
 			switch part.Part_type[0] {
 			case 'P':
-				content += fmt.Sprintf("\t\t\t<TD BGCOLOR=\"lightblue\" WIDTH=\"%d\" ALIGN=\"CENTER\"><B>Primaria</B><BR/><B>%s</B><BR/>%.2f%% del disco</TD>\n", 
+				dotContent += fmt.Sprintf("\t\t\t<TD BGCOLOR=\"lightblue\" WIDTH=\"%d\" ALIGN=\"CENTER\"><B>Primaria</B><BR/><B>%s</B><BR/>%.2f%% del disco</TD>\n", 
 					cellWidth, partName, percentage)
 				usedSpace += part.Part_size
 			case 'E':
 				// La celda en sí es la extendida, sin tabla anidada adicional
-				content += fmt.Sprintf("\t\t\t<TD BGCOLOR=\"orange\" WIDTH=\"%d\" ALIGN=\"CENTER\" CELLPADDING=\"0\">\n", cellWidth)
-				content += "\t\t\t\t<TABLE BORDER=\"0\" CELLBORDER=\"0\" CELLSPACING=\"0\" CELLPADDING=\"5\" WIDTH=\"100%\">\n"
-				content += "\t\t\t\t<TR><TD COLSPAN=\"100\" ALIGN=\"CENTER\"><B>Extendida</B></TD></TR>\n"
-				content += "\t\t\t\t<TR>\n"
+				dotContent += fmt.Sprintf("\t\t\t<TD BGCOLOR=\"orange\" WIDTH=\"%d\" ALIGN=\"CENTER\" CELLPADDING=\"0\">\n", cellWidth)
+				dotContent += "\t\t\t\t<TABLE BORDER=\"0\" CELLBORDER=\"0\" CELLSPACING=\"0\" CELLPADDING=\"5\" WIDTH=\"100%\">\n"
+				dotContent += "\t\t\t\t<TR><TD COLSPAN=\"100\" ALIGN=\"CENTER\"><B>Extendida</B></TD></TR>\n"
+				dotContent += "\t\t\t\t<TR>\n"
 
 				file, err := os.Open(diskPath)
 				if err != nil {
@@ -78,8 +78,8 @@ func ReportDisk(mbr *structures.MBR, diskPath string, outputPath string) error {
 					logicalName := strings.TrimRight(string(ebr.Part_name[:]), "\x00")
 					
 					// EBR ahora es gris
-					content += "\t\t\t\t<TD BGCOLOR=\"gray\" ALIGN=\"CENTER\" BORDER=\"1\"><B>EBR</B></TD>\n"
-					content += fmt.Sprintf("\t\t\t\t<TD BGCOLOR=\"lightgreen\" ALIGN=\"CENTER\" BORDER=\"1\"><B>Lógica</B><BR/>%s<BR/>%.2f%%</TD>\n", 
+					dotContent += "\t\t\t\t<TD BGCOLOR=\"gray\" ALIGN=\"CENTER\" BORDER=\"1\"><B>EBR</B></TD>\n"
+					dotContent += fmt.Sprintf("\t\t\t\t<TD BGCOLOR=\"lightgreen\" ALIGN=\"CENTER\" BORDER=\"1\"><B>Lógica</B><BR/>%s<BR/>%.2f%%</TD>\n", 
 						logicalName, logicalPercentage)
 					
 					usedSpace += ebr.Part_size
@@ -90,10 +90,10 @@ func ReportDisk(mbr *structures.MBR, diskPath string, outputPath string) error {
 					offset = ebr.Part_next
 				}
 
-				content += "\t\t\t\t<TD BGCOLOR=\"gray\" ALIGN=\"CENTER\" BORDER=\"1\"><B>EBR</B></TD>\n"
-				content += "\t\t\t\t</TR>\n"
-				content += "\t\t\t\t</TABLE>\n"
-				content += "\t\t\t</TD>\n"
+				dotContent += "\t\t\t\t<TD BGCOLOR=\"gray\" ALIGN=\"CENTER\" BORDER=\"1\"><B>EBR</B></TD>\n"
+				dotContent += "\t\t\t\t</TR>\n"
+				dotContent += "\t\t\t\t</TABLE>\n"
+				dotContent += "\t\t\t</TD>\n"
 			}
 		}
 	}
@@ -103,14 +103,14 @@ func ReportDisk(mbr *structures.MBR, diskPath string, outputPath string) error {
 	freeWidth := int(freePercentage * 8) // Ajustamos el ancho en base al porcentaje
 
 	if freeSpace > 0 {
-		content += fmt.Sprintf("\t\t\t<TD BGCOLOR=\"#F5F5F5\" WIDTH=\"%d\" ALIGN=\"CENTER\"><B>Libre</B><BR/>%.2f%% del disco</TD>\n", 
+		dotContent += fmt.Sprintf("\t\t\t<TD BGCOLOR=\"#F5F5F5\" WIDTH=\"%d\" ALIGN=\"CENTER\"><B>Libre</B><BR/>%.2f%% del disco</TD>\n", 
 			freeWidth, freePercentage)
 	}
 	
-	content += "\t\t\t</TR>\n"
-	content += "\t\t\t</TABLE>\n>];\n"
-	content += "\t}\n"
-	content += "}\n"
+	dotContent += "\t\t\t</TR>\n"
+	dotContent += "\t\t\t</TABLE>\n>];\n"
+	dotContent += "\t}\n"
+	dotContent += "}\n"
 
 	// Guardar el contenido DOT en un archivo
 	file, err := os.Create(dotFileName)
@@ -119,7 +119,7 @@ func ReportDisk(mbr *structures.MBR, diskPath string, outputPath string) error {
 	}
 	defer file.Close()
 
-	_, err = file.WriteString(content)
+	_, err = file.WriteString(dotContent)
 	if err != nil {
 		return fmt.Errorf("error al escribir en el archivo DOT: %v", err)
 	}

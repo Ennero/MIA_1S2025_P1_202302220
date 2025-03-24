@@ -66,7 +66,7 @@ func (sb *SuperBlock) CreateUsersFile(path string) error {
 	sb.S_free_blocks_count--
 	sb.S_first_blo += sb.S_block_size
 
-	// ----------- Creamos /users.txt -----------
+	// ----------- Creamos /users.txt ---------------------------------------------------------------------------------------------------------------
 	usersText := "1,G,root\n1,U,root,123\n"
 
 	// Deserializar el inodo raíz

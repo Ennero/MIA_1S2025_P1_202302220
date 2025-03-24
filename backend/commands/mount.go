@@ -83,12 +83,19 @@ func ParseMount(tokens []string) (string, error) {
 		return "", err
 	}
 
+	if len(stores.ListMounted) == 0 {
+		return "", errors.New("no hay particiones montadas")
+	}
+	lastElement := stores.ListMounted[len(stores.ListMounted)-1]
+
+
+
 	// Devuelve un mensaje de éxito con los detalles del montaje
 	return fmt.Sprintf("MOUNT: Partición montada exitosamente\n"+
 		"-> Path: %s\n"+
 		"-> Nombre: %s\n"+
 		"-> ID: %s",
-		cmd.path, cmd.name, idPartition), nil
+		cmd.path, cmd.name, lastElement), nil
 }
 
 func commandMount(mount *MOUNT) error {

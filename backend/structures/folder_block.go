@@ -63,10 +63,14 @@ func (fb *FolderBlock) Deserialize(path string, offset int64) error {
 
 	// Leer solo la cantidad de bytes que corresponden al tamaño de la estructura FolderBlock
 	buffer := make([]byte, fbSize)
-	_, err = file.Read(buffer)
+	bytesRead, err := file.Read(buffer)
 	if err != nil {
 		return err
 	}
+
+	if bytesRead < fbSize {
+        return fmt.Errorf("no se pudieron leer todos los bytes: leídos %d, esperados %d", bytesRead, fbSize)
+    }
 
 	// Deserializar los bytes leídos en la estructura FolderBlock
 	reader := bytes.NewReader(buffer)

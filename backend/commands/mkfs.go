@@ -19,8 +19,8 @@ type MKFS struct {
 }
 
 /*
-   mkfs -id=vd1 -type=full
-   mkfs -id=vd2
+    mkfs -id=vd1 -type=full
+    mkfs -id=vd2
 */
 
 func ParseMkfs(tokens []string) (string, error) {
@@ -82,6 +82,10 @@ func ParseMkfs(tokens []string) (string, error) {
 	if err != nil {
 		fmt.Println("Error:", err)
 	}
+
+
+	//Aquí solo indico que la partición actual es a la que se le hizo el mkfs
+	IdPartition = cmd.id
 
 	return fmt.Sprintf("MKFS: Sistema de archivos creado exitosamente\n"+
 		"-> ID: %s\n"+

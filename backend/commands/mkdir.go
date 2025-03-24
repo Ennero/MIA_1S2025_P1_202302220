@@ -83,11 +83,11 @@ func ParseMkdir(tokens []string) (string, error) {
 
 // Aquí debería de estar logeado un usuario, por lo cual el usuario debería tener consigo el id de la partición
 // En este caso el ID va a estar quemado
-var idPartition = "531A"
+var IdPartition = "201A"
 
 func commandMkdir(mkdir *MKDIR) error {
 	// Obtener la partición montada
-	partitionSuperblock, mountedPartition, partitionPath, err := stores.GetMountedPartitionSuperblock(idPartition)
+	partitionSuperblock, mountedPartition, partitionPath, err := stores.GetMountedPartitionSuperblock(IdPartition)
 	if err != nil {
 		return fmt.Errorf("error al obtener la partición montada: %w", err)
 	}

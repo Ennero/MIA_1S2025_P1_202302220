@@ -43,6 +43,9 @@ func Analyzer(input string) (string, error) {
 	case "mounted":
 		// Llama la función CommandMounted del paquete commands con los argumentos restantes
 		return commands.ParseMounted(tokens[1:])
+	case "cat":
+		// Llama la función CommandCat del paquete commands con los argumentos restantes
+		return commands.ParseCat(tokens[1:])
 	default:
 		// Si el comando no es reconocido, devuelve un error
 		return "", fmt.Errorf("comando desconocido: %s", tokens[0])

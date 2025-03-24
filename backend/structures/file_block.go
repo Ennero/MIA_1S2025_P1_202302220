@@ -62,6 +62,8 @@ func (fb *FileBlock) Deserialize(path string, offset int64) error {
 		return err
 	}
 
+	
+
 	// Deserializar los bytes leídos en la estructura FileBlock
 	reader := bytes.NewReader(buffer)
 	err = binary.Read(reader, binary.LittleEndian, fb)
