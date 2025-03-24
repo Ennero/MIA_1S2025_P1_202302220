@@ -24,15 +24,41 @@ Este manual tiene la finalidad de brindar
 - Tener el compilador de golang
 
 ### Descripción de la arquitectura del programa
+El programa está ideado por dos partes principales, **backend** y **frontend**.
+
+#### Frontend
+Esta es la interfaz con la que el usuario interactúa con el sistema de archivos EXT2. Consiste en una consola donde se pueden ingresar comandos directamente y una serie de botones con las siguientes funciones:
+- Cargar un archivo con extensión .mias, que contiene un script con comandos para ejecutar.
+
+- Ejecutar el script, enviando los comandos al backend.
+
+- Limpiar la consola para facilitar la lectura de los resultados.
+
+![1](./img/1.png)
+
+En la parte inferior, la consola muestra los resultados de los comandos ejecutados y proporciona información sobre el estado del sistema de archivos.
+
+El frontend está desarrollado con el framework Vue.js y se comunica con el backend mediante una API REST y JSON.
 
 
+#### Backend
+El backend es el núcleo del sistema, encargado de simular el almacenamiento en EXT2 y procesar los comandos recibidos desde el frontend. Se encarga de:
+- Interpretar los comandos ingresados y ejecutar las acciones correspondientes.
+- Modificar la estructura del sistema de archivos (inodos, bloques, bitmaps, etc.).
+- Manejar la simulación del disco virtual y la gestión de particiones (primarias, extendidas y lógicas).
+- Devolver respuestas al frontend con información sobre las operaciones realizadas.
 
+El backend está desarrollado con Fiber, un framework de alto rendimiento para Go, y expone una API REST para la comunicación con el frontend.
+#### Diagrama de integración
+![2](./img/2.png)
 
 ### Explicación de las estructuras de datos
-Para la creación de este proyecto, se usaron estructuras de vital importancia para los sistemas de archivos entre los cuales están MBR, EBR, inodos y bloques.
+Para la creación de este proyecto, se usaron estructuras de vital importancia para los sistemas de archivos entre los cuales están MBR, EBR, inodos y bloques. A continuación una pequeña explicación de cada una algunas de estas:
+
+
 
 #### Estructura MBR
-La estructura MBR se crea junto a un nuevo disco, que en este proyecto es el archivo de la extensión .mia.
+ Ubicado en el primer sector del disco. La estructura MBR se crea junto a un nuevo disco, que en este proyecto es el archivo de la extensión .mia.
 Este contiene dentro de sí la información de todas las particiones del sistema de archivos, por lo que se encuentra en el primer sector del disco. Este contiene la siguiente información:
 - Tamaño del disco en byte
 - Fecha de creación del disco
@@ -40,12 +66,222 @@ Este contiene dentro de sí la información de todas las particiones del sistema
 - Un ajuste del tipo de partición
 - Información de las cuatro particiones capaces de contener en sí
 
+```go
+type MBR struct {
+	Mbr_size           int32        // Tamaño del MBR en bytes
+	Mbr_creation_date  float32      // Fecha y hora de creación del MBR
+	Mbr_disk_signature int32        // Firma del disco
+	Mbr_disk_fit       [1]byte      // Tipo de ajuste
+	Mbr_partitions     [4]Partition // Particiones del MBR
+}
+```
 
-#### Estructura Inodo
+#### Estructrura EBR
+La estructura EBR se utiliza para manejar particiones lógicas dentro de una partición extendida. Se encuentra en el primer sector de cada partición lógica y permite encadenar múltiples particiones lógicas dentro de una extendida. Contiene la siguiente información:
+- Estado de la partición (activa o inactiva).
+- Tipo de sistema de archivos.
+- Tamaño de la partición en bytes.
+- Dirección del siguiente EBR (si existe otra partición lógica).
+- Dirección de inicio de la partición lógica
+```go
+type EBR struct {
+	Part_status  [1]byte  // Estado de la partición
+	Part_fit     [1]byte  // Tipo de ajuste
+	Part_start   int32    // Byte de inicio de la partición
+	Part_size    int32    // Tamaño de la partición
+	Part_next    int32    // Dirección del siguiente EBR (-1 si no hay otro)
+	Part_name    [16]byte // Nombre de la partición
+}
+```
+#### Inodo
+Los inodos son estructuras fundamentales en el sistema de archivos EXT2, encargadas de almacenar la información de archivos y carpetas. Cada inodo contiene metadatos sobre un archivo o directorio, pero no almacena directamente su contenido. Un inodo incluye la siguiente información:
 
+- Tipo de archivo (archivo regular, directorio, enlace simbólico, etc.).
+- Permisos de acceso (lectura, escritura, ejecución).
+- UID y GID del propietario y grupo del archivo.
+- Tamaño del archivo en bytes.
+- Timestamps (fecha de creación, modificación y acceso).
+- Número de enlaces (cantidad de referencias al inodo).
+- Punteros a bloques de datos, organizados en:
+  - 12 punteros directos → Apuntan directamente a bloques de datos.
+  - 1 puntero indirecto simple → Apunta a un bloque que contiene más punteros a datos.
+  - 1 puntero indirecto doble → Apunta a un bloque que contiene punteros a otros bloques de punteros.
+  - 1 puntero indirecto triple → Apunta a un bloque que contiene punteros a bloques de punteros dobles.
 
-#### Estructura 
+Los inodos permiten una administración eficiente del espacio en disco, separando los metadatos de los datos del archivo.
 
+```go
+type Inode struct {
+	I_uid   int32
+	I_gid   int32
+	I_size  int32
+	I_atime float32
+	I_ctime float32
+	I_mtime float32
+	I_block [15]int32
+	I_type  [1]byte
+	I_perm  [3]byte
+}
+```
+
+#### SuperBlock
+El SuperBlock es una estructura clave del sistema de archivos EXT2. Contiene la información principal sobre el sistema de archivos y se encuentra al inicio de cada partición formateada con EXT2. Contiene la siguiente información:
+- Tamaño total del sistema de archivos.
+- Número total de inodos y bloques.
+- Tamaño de los bloques.
+- Cantidad de bloques e inodos libres.
+- Dirección del primer bloque de datos.
+
+```go
+type SuperBlock struct {
+	S_filesystem_type   int32
+	S_inodes_count      int32
+	S_blocks_count      int32
+	S_free_inodes_count int32
+	S_free_blocks_count int32
+	S_mtime             float32
+	S_umtime            float32
+	S_mnt_count         int32
+	S_magic             int32
+	S_inode_size        int32
+	S_block_size        int32
+	S_first_ino         int32
+	S_first_blo         int32
+	S_bm_inode_start    int32
+	S_bm_block_start    int32
+	S_inode_start       int32
+	S_block_start       int32
+	// Total: 68 bytes
+}
+```
+Basicamente porporciona información general del sistema de archivos.
+
+#### Bitmap
+Los bitmaps se usan para llevar el control de los bloques e inodos ocupados o libres dentro del sistema de archivos. Se almacenan en forma de bits y están divididos en dos tipos:
+- Bitmap de inodos: Indica qué inodos están en uso o libres.
+- Bitmap de bloques: Indica qué bloques de datos están ocupados o libres.
+
+ Basciamente es un registros de inodos y bloques ocupados/libres.
+  
+#### PointerBlock
+El PointerBlock es una estructura que almacena direcciones de bloques de datos. Se utiliza para gestionar archivos o carpetas grandes que requieren más de un bloque de almacenamiento. Puede contener:
+- Punteros directos a bloques de datos.
+- Punteros indirectos a otros PointerBlocks (para estructuras más grandes).
+```go
+type PointerBlock struct {
+	P_pointers [16]int32 // 16 * 4 = 64 bytes
+	// Total: 64 bytes
+}
+```
+#### Partition
+La Partition es una división dentro del disco que puede contener un sistema de archivos. Existen tres tipos en este proyecto:
+- Primaria: Contiene directamente un sistema de archivos.
+- Extendida: Puede contener múltiples particiones lógicas.
+- Lógica: Se almacena dentro de una partición extendida y contiene un sistema de archivos.
+Cada partición contiene la siguiente información:
+- Tipo de partición.
+- Tamaño en bytes.
+- Punto de inicio dentro del disco.
+- Estado (activa o inactiva).
+
+```go
+type Partition struct {
+	Part_status      [1]byte  // Estado de la partición
+	Part_type        [1]byte  // Tipo de partición
+	Part_fit         [1]byte  // Ajuste de la partición
+	Part_start       int32    // Byte de inicio de la partición
+	Part_size        int32    // Tamaño de la partición
+	Part_name        [16]byte // Nombre de la partición
+	Part_correlative int32    // Correlativo de la partición
+	Part_id          [4]byte  // ID de la partición
+}
+```
+
+#### FolderBlock
+El FolderBlock almacena la información de una carpeta dentro del sistema de archivos. Contiene una lista de entradas que pueden ser archivos o subcarpetas. Cada entrada almacena:
+- Nombre de la carpeta o archivo.
+- Número de inodo asociado.
+
+Si una carpeta tiene muchas entradas, puede utilizar PointerBlocks para almacenar más referencias.
+
+```go
+type FolderBlock struct {
+	B_content [4]FolderContent // 4 * 16 = 64 bytes
+	// Total: 64 bytes
+}
+
+type FolderContent struct {
+	B_name  [12]byte
+	B_inodo int32
+	// Total: 16 bytes
+}
+```
+
+#### FileBlock
+El FileBlock almacena datos de un archivo en bloques de tamaño fijo. Cada FileBlock es parte de la estructura de un archivo y contiene:
+- Datos del archivo en formato binario.
+- Punteros a otros FileBlocks si el archivo es grande.
+```go
+type FileBlock struct {
+	B_content [64]byte
+}
+```
 
 
 ### Descripción de los comandos implementados
+Los comando utilizado para la ejecución de todo el proceso fueron los siguiente:
+
+#### mdisk
+Este comando se utiliza para crear un archivo binario que simula un disco duro físico.  Al crearlo, se especifica el tamaño, la unidad de medida (KB, MB), el tipo de ajuste para las particiones (Best Fit, First Fit, Worst Fit) y la ruta donde se guardará el archivo.  El archivo binario se inicializa llenándolo con ceros binarios, representando el espacio disponible del disco. 
+
+
+
+#### fdisk
+Este comando es fundamental para la administración de particiones dentro de un disco duro virtual.  Permite crear, eliminar o modificar particiones.  Al crear una partición, se pueden especificar parámetros como el tamaño, la unidad de medida, la ruta del disco, el tipo de partición (primaria, extendida o lógica), el algoritmo de ajuste de espacio (Best Fit, First Fit, Worst Fit) y el nombre de la partición.  El sistema debe controlar que se cumplan las reglas de las particiones (máximo 4 particiones primarias o extendidas, solo una extendida por disco, etc.) y mostrar mensajes de error si no se pueden realizar las operaciones.
+
+#### mount
+mite "montar" una partición de un disco en el sistema.  Esto implica hacerla accesible para las operaciones del sistema de archivos.  El comando recibe como parámetros la ruta del disco y el nombre de la partición a montar.  Al montar, se le asigna un ID a la partición y se actualiza su estado en las estructuras de datos.  Es importante tener en cuenta que el montaje se realiza en la memoria RAM, no en el disco.
+
+#### mkfs
+Este comando formatea una partición, preparándola para almacenar archivos y directorios.  En este caso, el formateo se realiza con el sistema de archivos EXT2.  Además, crea un archivo llamado "users.txt" en el directorio raíz de la partición, el cual almacenará información sobre los usuarios y grupos del sistema.  Los parámetros que recibe son el ID de la partición a formatear y, opcionalmente, el tipo de formateo (completo). 
+
+#### rep
+Este comando genera reportes sobre el sistema de archivos.  Recibe como parámetros el nombre del reporte a generar, la ruta donde se guardará el reporte y el ID de la partición a utilizar.  Algunos reportes pueden recibir parámetros adicionales, como la ruta de un archivo o carpeta.  Los reportes se generan utilizando Graphviz.
+
+#### mkdir
+Crea un nuevo directorio (carpeta).  Es similar a MKFILE, pero para crear carpetas.  Recibe como parámetros la ruta de la carpeta y, opcionalmente, un indicador para crear las carpetas padre en la ruta.
+
+#### rmdisk
+Su función es eliminar un archivo que previamente fue creado para simular un disco duro.  El único parámetro necesario es la ruta del archivo que se desea eliminar.  Si el archivo no existe, el sistema debe mostrar un mensaje de error.  
+
+#### mounted
+Este comando muestra un listado de todas las particiones que han sido montadas en la memoria del sistema.  Generalmente, muestra información como el ID de cada partición montada.  No recibe parámetros.  
+
+#### cat
+Permite mostrar el contenido de uno o varios archivos.  Recibe como parámetro una lista de los archivos cuyo contenido se quiere mostrar.  Si un archivo no existe o el usuario no tiene permisos de lectura, se debe mostrar un mensaje de error.  
+
+#### login
+Se utiliza para iniciar una sesión en el sistema.  Los parámetros requeridos son el nombre de usuario, la contraseña y el ID de la partición en la que se desea iniciar sesión.  El sistema debe verificar que el usuario exista y que la contraseña sea correcta.  No se puede iniciar una nueva sesión sin cerrar la anterior.
+
+#### logout
+Cierra la sesión activa del usuario.  No recibe parámetros.  Solo se puede ejecutar si hay una sesión activa. 
+
+#### mkgrp
+Crea un nuevo grupo de usuarios.  Este comando solo puede ser ejecutado por el usuario "root".  Recibe como parámetro el nombre del grupo a crear.  El nombre del grupo no puede existir previamente.
+
+#### rmgrp
+Elimina un grupo de usuarios existente.  Solo puede ser ejecutado por el usuario "root".  Recibe como parámetro el nombre del grupo a eliminar.  Si el grupo no existe, se debe mostrar un mensaje de error. 
+
+#### mkusr
+Crea un nuevo usuario.  Solo puede ser ejecutado por el usuario "root".  Los parámetros necesarios son el nombre de usuario, la contraseña y el grupo al que pertenecerá el usuario.  El nombre de usuario no puede existir previamente y el grupo debe existir.  
+
+#### rmusr
+Elimina un usuario existente.  Solo puede ser ejecutado por el usuario "root".  Recibe como parámetro el nombre del usuario a eliminar.  Si el usuario no existe, se debe mostrar un mensaje de error.  
+
+#### chgrp
+Cambia el grupo al que pertenece un usuario.  Solo puede ser ejecutado por el usuario "root".  Los parámetros son el nombre del usuario y el nombre del nuevo grupo.  El usuario y el grupo deben existir.
+
+#### mkfile
+Este comando permite crear un nuevo archivo.  El usuario que ejecuta el comando se convierte en el propietario del archivo.  Los parámetros incluyen la ruta del archivo, y opcionalmente, un indicador para crear las carpetas padre en la ruta, el tamaño del archivo y la ruta de un archivo existente para copiar su contenido. 
+
+
