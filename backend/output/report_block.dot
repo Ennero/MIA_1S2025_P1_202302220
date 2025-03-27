@@ -1,0 +1,62 @@
+digraph G {
+		rankdir=LR;
+		node [shape=plaintext]block0 [label=<
+				<table border="0" cellborder="1" cellspacing="0">
+					<tr><td colspan="2" bgcolor="lightblue"><b>Bloque Carpeta 0</b></td></tr>
+					<tr><td bgcolor="lightgreen"><b>Contenido</b></td><td><b>Inodo</b></td></tr>
+				
+							<tr><td>.</td><td>0</td></tr>
+						
+							<tr><td>..</td><td>0</td></tr>
+						
+							<tr><td>users.txt</td><td>1</td></tr>
+						
+							<tr><td>home</td><td>2</td></tr>
+						</table>>];block0 -> block1;
+block1 [label=<
+				<table border="0" cellborder="1" cellspacing="0">
+					<tr><td bgcolor="lightblue"><b>Bloque Archivo 1</b></td></tr>
+					<tr><td>1,G,root
+1,U,root,123
+</td></tr>
+				</table>>];
+				block1 -> block2;
+block2 [label=<
+				<table border="0" cellborder="1" cellspacing="0">
+					<tr><td colspan="2" bgcolor="lightblue"><b>Bloque Carpeta 2</b></td></tr>
+					<tr><td bgcolor="lightgreen"><b>Contenido</b></td><td><b>Inodo</b></td></tr>
+				
+							<tr><td>.</td><td>2</td></tr>
+						
+							<tr><td>..</td><td>0</td></tr>
+						
+							<tr><td>usac</td><td>3</td></tr>
+						
+							<tr><td>-</td><td>-1</td></tr>
+						</table>>];block2 -> block3;
+block3 [label=<
+				<table border="0" cellborder="1" cellspacing="0">
+					<tr><td colspan="2" bgcolor="lightblue"><b>Bloque Carpeta 3</b></td></tr>
+					<tr><td bgcolor="lightgreen"><b>Contenido</b></td><td><b>Inodo</b></td></tr>
+				
+							<tr><td>.</td><td>3</td></tr>
+						
+							<tr><td>..</td><td>2</td></tr>
+						
+							<tr><td>mia</td><td>4</td></tr>
+						
+							<tr><td>-</td><td>-1</td></tr>
+						</table>>];block3 -> block4;
+block4 [label=<
+				<table border="0" cellborder="1" cellspacing="0">
+					<tr><td colspan="2" bgcolor="lightblue"><b>Bloque Carpeta 4</b></td></tr>
+					<tr><td bgcolor="lightgreen"><b>Contenido</b></td><td><b>Inodo</b></td></tr>
+				
+							<tr><td>.</td><td>4</td></tr>
+						
+							<tr><td>..</td><td>3</td></tr>
+						
+							<tr><td>-</td><td>-1</td></tr>
+						
+							<tr><td>-</td><td>-1</td></tr>
+						</table>>];}

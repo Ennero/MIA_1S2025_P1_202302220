@@ -100,8 +100,8 @@ func (inode *Inode) Print() {
 }
 
 // FUNCIÓN PARA BUSCAR UN ARCHIVO---------------------------------------------------------------------------------------
-func FindInodeByPath(sb *SuperBlock, diskPath string, path string) (*Inode, error) {
-
+// FUNCIÓN PARA BUSCAR UN ARCHIVO---------------------------------------------------------------------------------------
+func FindInodeByPath(sb *SuperBlock, diskPath string, path string) (int32, *Inode, error) {
 	fmt.Printf("Buscando inodo para path: %s\n", path)
 
 	components := strings.Split(path, "/")
@@ -118,29 +118,28 @@ func FindInodeByPath(sb *SuperBlock, diskPath string, path string) (*Inode, erro
 	if len(cleanComponents) == 0 {
 		rootInode := &Inode{}
 		if err := rootInode.Deserialize(diskPath, int64(sb.S_inode_start)); err != nil {
-			return nil, fmt.Errorf("error al leer inodo raíz: %v", err)
+			return -1, nil, fmt.Errorf("error al leer inodo raíz: %v", err)
 		}
-		return rootInode, nil
+		return 0, rootInode, nil
 	}
 
 	currentInodeNum := int32(0) // Inodo raíz es 0
 
 	// Para cada componente del path, buscar en el directorio correspondiente
 	for i, component := range cleanComponents {
-
 		fmt.Printf("Buscando componente %d: %s (en inodo %d)\n", i, component, currentInodeNum)
 
 		currentInode := &Inode{}
 		offset := int64(sb.S_inode_start + currentInodeNum*sb.S_inode_size)
 		if err := currentInode.Deserialize(diskPath, offset); err != nil {
-			return nil, err
+			return -1, nil, err
 		}
 
 		fmt.Printf("Tipo de inodo actual: %s\n", string(currentInode.I_type[:]))
 
 		// Verificar que el inodo actual es un directorio (excepto para el último componente)
 		if i < len(cleanComponents)-1 && currentInode.I_type[0] != '0' {
-			return nil, fmt.Errorf("'%s' no es un directorio", component)
+			return -1, nil, fmt.Errorf("'%s' no es un directorio", component)
 		}
 
 		found := false
@@ -157,7 +156,7 @@ func FindInodeByPath(sb *SuperBlock, diskPath string, path string) (*Inode, erro
 			folderBlock := &FolderBlock{}
 			blockOffset := int64(sb.S_block_start + blockPtr*sb.S_block_size)
 			if err := folderBlock.Deserialize(diskPath, blockOffset); err != nil {
-				return nil, fmt.Errorf("error al leer bloque %d: %v", blockPtr, err)
+				return -1, nil, fmt.Errorf("error al leer bloque %d: %v", blockPtr, err)
 			}
 
 			// Imprimir el contenido del bloque para depuración
@@ -195,7 +194,7 @@ func FindInodeByPath(sb *SuperBlock, diskPath string, path string) (*Inode, erro
 
 		// Si no se encontró el componente actual, devolver un error
 		if !found {
-			return nil, fmt.Errorf("no se encontró '%s' en el directorio actual", component)
+			return -1, nil, fmt.Errorf("no se encontró '%s' en el directorio actual", component)
 		}
 	}
 
@@ -206,14 +205,14 @@ func FindInodeByPath(sb *SuperBlock, diskPath string, path string) (*Inode, erro
 
 	// Debugeando
 	if err := targetInode.Deserialize(diskPath, offset); err != nil {
-		return nil, fmt.Errorf("error al leer inodo final %d: %v", currentInodeNum, err)
+		return -1, nil, fmt.Errorf("error al leer inodo final %d: %v", currentInodeNum, err)
 	}
 
 	// Debugeando
 	fmt.Printf("Inodo encontrado - tipo: %s, tamaño: %d\n",
 		string(targetInode.I_type[:]), targetInode.I_size)
 
-	return targetInode, nil
+	return currentInodeNum, targetInode, nil
 }
 
 func ReadFileContent(sb *SuperBlock, diskPath string, inode *Inode) (string, error) {

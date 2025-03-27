@@ -90,7 +90,7 @@ func commandCat(paths []string) (string, error) {
             path = "/" + path
         }
 
-        inode, err := structures.FindInodeByPath(mountedSb, mountedDiskPath, path)
+        _,inode, err := structures.FindInodeByPath(mountedSb, mountedDiskPath, path)
         if err != nil {
             return "", fmt.Errorf("error al buscar inodo: %v", err)
         }

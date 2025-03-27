@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"slices"
 )
 
 // REP estructura que representa el comando rep con sus parámetros
@@ -99,12 +100,7 @@ func ParseRep(tokens []string) (string, error) {
 
 // Función auxiliar para verificar si un valor está en una lista
 func contains(list []string, value string) bool {
-	for _, v := range list {
-		if v == value {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, value)
 }
 
 // Ejemplo de función commandRep (debe ser implementada)
@@ -121,22 +117,50 @@ func commandRep(rep *REP) error {
 		err = reports.ReportMBR(mountedMbr, mountedDiskPath, rep.path)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
+			return err
 		}
 	case "inode":
 		err = reports.ReportInode(mountedSb, mountedDiskPath, rep.path)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
+			return err
+
 		}
 	case "bm_inode":
 		err = reports.ReportBMInode(mountedSb, mountedDiskPath, rep.path)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
+			return err
+
 		}
 	case "disk":
 		err = reports.ReportDisk(mountedMbr, mountedDiskPath, rep.path)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
+			return err
+
 		}
+	case "bm_block":
+		err = reports.ReportBMBlock(mountedSb, mountedDiskPath, rep.path)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return err
+
+		}
+	case "sb":
+		err = reports.ReportSuperBlock(mountedSb, mountedDiskPath, rep.path)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return err
+
+		}
+	case "block":
+		err = reports.ReportBlock(mountedSb, mountedDiskPath, rep.path)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return err
+		}
+
 	}
 
 	return nil

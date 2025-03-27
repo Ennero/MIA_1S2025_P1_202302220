@@ -60,7 +60,8 @@ func ReportInode(superblock *structures.SuperBlock, diskPath string, path string
 			if j > 11 {
 				break
 			}
-			dotContent += fmt.Sprintf(`<tr><td bgcolor="lightyellow"><b>%d</b></td><td>%d</td></tr>`, j+1, block)		}
+			dotContent += fmt.Sprintf(`<tr><td bgcolor="lightyellow"><b>%d</b></td><td>%d</td></tr>`, j+1, block)
+		}
 
 		// Agregar los bloques indirectos a la tabla
 		dotContent += fmt.Sprintf(`
