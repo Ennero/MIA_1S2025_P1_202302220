@@ -46,6 +46,13 @@ func Analyzer(input string) (string, error) {
 	case "cat":
 		// Llama la función CommandCat del paquete commands con los argumentos restantes
 		return commands.ParseCat(tokens[1:])
+	case "login":
+		// Llama a la función ParseLogin del paquete commands con los argumentos restantes
+		return commands.ParseLogin(tokens[1:])
+	case "logout":
+		// Llama a la función ParseLogout del paquete commands con los argumentos restantes
+		return commands.ParseLogout(tokens[1:])
+
 	default:
 		// Si el comando no es reconocido, devuelve un error
 		return "", fmt.Errorf("comando desconocido: %s", tokens[0])

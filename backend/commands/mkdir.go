@@ -81,13 +81,18 @@ func ParseMkdir(tokens []string) (string, error) {
 	return fmt.Sprintf("MKDIR: Directorio %s creado correctamente.", cmd.path), nil // Devuelve el comando MKDIR creado
 }
 
-// Aquí debería de estar logeado un usuario, por lo cual el usuario debería tener consigo el id de la partición
-// En este caso el ID va a estar quemado
-var IdPartition = "201A"
 
 func commandMkdir(mkdir *MKDIR) error {
 	// Obtener la partición montada
-	partitionSuperblock, mountedPartition, partitionPath, err := stores.GetMountedPartitionSuperblock(IdPartition)
+	var partitionID string
+
+	if stores.Auth.IsAuthenticated() {
+		partitionID = stores.Auth.GetPartitionID()
+	} else {
+		return errors.New("no se ha iniciado sesión en ninguna partición")
+	}
+
+	partitionSuperblock, mountedPartition, partitionPath, err := stores.GetMountedPartitionSuperblock(partitionID)
 	if err != nil {
 		return fmt.Errorf("error al obtener la partición montada: %w", err)
 	}

@@ -203,3 +203,60 @@ func (sb *SuperBlock) CreateFolder(path string, parentsDir []string, destDir str
 
 	return nil
 }
+
+
+// PARA EL LOGIN --------------------------------------------------------------------------------------------------------------------
+
+// Get users.txt block
+func (sb *SuperBlock) GetUsersBlock(path string) (*FileBlock, error) {
+	// Ir al inodo 1
+	inode := &Inode{}
+
+	// Deserializar el inodo
+	err := inode.Deserialize(path, int64(sb.S_inode_start+(1*sb.S_inode_size)))
+	if err != nil {
+		return nil, err
+	}
+
+	// Iterar sobre cada bloque del inodo (apuntadores)
+	for _, blockIndex := range inode.I_block {
+		// Si el bloque no existe, salir
+		if blockIndex == -1 {
+			break
+		}
+		// Si el inodo es de tipo archivo
+		if inode.I_type[0] == '1' {
+			block := &FileBlock{}
+			// Deserializar el bloque
+			err := block.Deserialize(path, int64(sb.S_block_start+(blockIndex*sb.S_block_size))) // 64 porque es el tamaño de un bloque
+			if err != nil {
+				return nil, err
+			}
+			// Voy guardando el contenido del bloque			
+			//content := string(block.B_content[:])
+//********************************************************************************************************************************************
+
+			//content := block.B_content[:]
+
+
+			// Retornar el bloque por temas explicativos
+			return block, nil
+		}
+
+		
+	}
+
+	//if content!= "" {
+		//return content, nil
+	//}
+	
+	return nil, fmt.Errorf("users.txt block not found")
+}
+
+
+
+
+
+
+
+

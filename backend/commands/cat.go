@@ -2,10 +2,11 @@ package commands
 
 import (
 	stores "backend/stores"
+	structures "backend/structures"
+	"errors"
 	"fmt"
 	"regexp" // Paquete para trabajar con expresiones regulares, útil para encontrar y manipular patrones en cadenas
 	"strings"
-	structures "backend/structures"
 )
 
 func ParseCat(tokens []string) (string, error) {
@@ -77,7 +78,19 @@ func ParseCat(tokens []string) (string, error) {
 
 func commandCat(paths []string) (string, error) {
     salida := ""
-    _, mountedSb, mountedDiskPath, err := stores.GetMountedPartitionRep(IdPartition)
+
+
+	var partitionID string
+
+	if stores.Auth.IsAuthenticated() {
+		partitionID = stores.Auth.GetPartitionID()
+	} else {
+		return "",errors.New("no se ha iniciado sesión en ninguna partición")
+	}
+
+
+
+    _, mountedSb, mountedDiskPath, err := stores.GetMountedPartitionRep(partitionID)
     if err != nil {
         return "", err
     }

@@ -81,11 +81,9 @@ func ParseMkfs(tokens []string) (string, error) {
 	err := commandMkfs(cmd)
 	if err != nil {
 		fmt.Println("Error:", err)
+		return "", err
 	}
 
-
-	//Aquí solo indico que la partición actual es a la que se le hizo el mkfs
-	IdPartition = cmd.id
 
 	return fmt.Sprintf("MKFS: Sistema de archivos creado exitosamente\n"+
 		"-> ID: %s\n"+
