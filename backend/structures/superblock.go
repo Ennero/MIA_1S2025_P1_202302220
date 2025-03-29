@@ -179,10 +179,8 @@ func (sb *SuperBlock) PrintBlocks(path string) error {
 				block.Print()
 				continue
 			}
-
 		}
 	}
-
 	return nil
 }
 

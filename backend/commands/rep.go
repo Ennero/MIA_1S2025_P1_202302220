@@ -160,7 +160,6 @@ func commandRep(rep *REP) error {
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}
-
 	}
 
 	return nil

@@ -109,6 +109,7 @@ func ParseMkdisk(tokens []string) (string, error) {
 	err := commandMkdisk(cmd)
 	if err != nil {
 		fmt.Println("Error:", err)
+		return "", err
 	}
 
 		// Devuelve un mensaje de éxito con los detalles del disco creado
@@ -187,7 +188,7 @@ func createMBR(mkdisk *MKDISK, sizeBytes int) error {
 		fitByte = 'W'
 	default:
 		fmt.Println("Invalid fit type")
-		return nil
+		return errors.New("tipo de ajuste inválido")
 	}
 
 	// Crear el MBR con los valores proporcionados
@@ -215,6 +216,7 @@ func createMBR(mkdisk *MKDISK, sizeBytes int) error {
 	err := mbr.Serialize(mkdisk.path)
 	if err != nil {
 		fmt.Println("Error:", err)
+		return err
 	}
 	return nil
 }

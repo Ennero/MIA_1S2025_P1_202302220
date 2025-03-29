@@ -8,7 +8,6 @@ import (
 	"strings"
 )
 
-
 // ReportBlock genera un reporte de bloques y lo guarda en la ruta especificada
 func ReportBMBlock(superblock *structures.SuperBlock, diskPath string, path string) error {
 

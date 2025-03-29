@@ -65,7 +65,6 @@ func ParseCat(tokens []string) (string, error) {
 
 	texto, err := commandCat(paths)
 
-	// Aquí se puede agregar la lógica para ejecutar el comando mkdir con los parámetros proporcionados
 	if err != nil {
 		return "", err
 	}
@@ -130,7 +129,5 @@ func commandCat(paths []string) (string, error) {
 
         salida += fmt.Sprintf("%s\n", content) // Revisar después si me dan ganas que se vea bonito
     }
-
-
     return salida, nil
 }

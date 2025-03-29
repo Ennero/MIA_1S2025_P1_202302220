@@ -113,17 +113,6 @@ func ReportBlock(superblock *structures.SuperBlock, diskPath string, path string
 			if i < superblock.S_blocks_count-1 {
 			dotContent += fmt.Sprintf("block%d -> block%d;\n", i, i+1)
 			}
-
-
-
-
-
-
-
-
-
-			
-			
 		}
 	}
 
