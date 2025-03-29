@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 	"slices"
+	"strings"
 )
 
 // REP estructura que representa el comando rep con sus parámetros
@@ -75,6 +75,10 @@ func ParseRep(tokens []string) (string, error) {
 	// Verifica que los parámetros obligatorios hayan sido proporcionados
 	if cmd.id == "" || cmd.path == "" || cmd.name == "" {
 		return "", errors.New("faltan parámetros requeridos: -id, -path, -name")
+	}
+
+	if cmd.name == "file" && cmd.path_file_ls == "" {
+		return "", errors.New("el parámetro -path_file_ls es requerido para el reporte 'file'")
 	}
 
 	// Aquí se puede agregar la lógica para ejecutar el comando rep con los parámetros proporcionados
@@ -160,6 +164,14 @@ func commandRep(rep *REP) error {
 			fmt.Printf("Error: %v\n", err)
 			return err
 		}
+
+	case "file":
+		err = reports.ReportFile(mountedSb, mountedDiskPath, rep.path, rep.path_file_ls)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return err
+		}
+
 	}
 
 	return nil
