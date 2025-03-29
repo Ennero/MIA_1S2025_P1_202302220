@@ -49,3 +49,28 @@ func (pb *PointerBlock) Deserialize(path string, offset int64) error {
 
 	return nil
 }
+
+// Serialize escribe la estructura FileBlock en un archivo binario en la posición especificada
+func (pb *PointerBlock) Serialize(path string, offset int64) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Mover el puntero del archivo a la posición especificada
+	_, err = file.Seek(offset, 0)
+	if err != nil {
+		return err
+	}
+
+	// Serializar la estructura FileBlock directamente en el archivo
+	err = binary.Write(file, binary.LittleEndian, pb)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+
