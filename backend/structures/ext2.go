@@ -29,7 +29,8 @@ func (sb *SuperBlock) CreateUsersFile(path string) error {
 	}
 
 	// Actualizar el bitmap de inodos
-	err = sb.UpdateBitmapInode(path)
+	newInodeIndex := sb.S_inodes_count
+	err = sb.UpdateBitmapInode(path,newInodeIndex)
 	if err != nil {
 		return err
 	}
@@ -50,7 +51,8 @@ func (sb *SuperBlock) CreateUsersFile(path string) error {
 	}
 
 	// Actualizar el bitmap de bloques
-	err = sb.UpdateBitmapBlock(path)
+	newBlockIndex := sb.S_blocks_count
+	err = sb.UpdateBitmapBlock(path, newBlockIndex)
 	if err != nil {
 		return err
 	}
@@ -113,7 +115,8 @@ func (sb *SuperBlock) CreateUsersFile(path string) error {
 	}
 
 	// Actualizar el bitmap de inodos
-	err = sb.UpdateBitmapInode(path)
+	newInodeIndex = sb.S_inodes_count
+	err = sb.UpdateBitmapInode(path, newInodeIndex)
 	if err != nil {
 		return err
 	}
@@ -143,7 +146,8 @@ func (sb *SuperBlock) CreateUsersFile(path string) error {
 	}
 
 	// Actualizar el bitmap de bloques
-	err = sb.UpdateBitmapBlock(path)
+	newBlockIndex = sb.S_blocks_count
+	err = sb.UpdateBitmapBlock(path, newBlockIndex)
 	if err != nil {
 		return err
 	}
@@ -261,7 +265,8 @@ func (sb *SuperBlock) createFolderInInode(path string, inodeIndex int32, parents
 				}
 
 				// Actualizar el bitmap de inodos
-				err = sb.UpdateBitmapInode(path)
+				newInodeIndex := sb.S_inodes_count
+				err = sb.UpdateBitmapInode(path, newInodeIndex)
 				if err != nil {
 					return err
 				}
@@ -288,7 +293,8 @@ func (sb *SuperBlock) createFolderInInode(path string, inodeIndex int32, parents
 				}
 
 				// Actualizar el bitmap de bloques
-				err = sb.UpdateBitmapBlock(path)
+				newBlockIndex := sb.S_blocks_count
+				err = sb.UpdateBitmapBlock(path, newBlockIndex)
 				if err != nil {
 					return err
 				}
