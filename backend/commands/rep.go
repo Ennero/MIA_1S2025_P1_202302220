@@ -81,6 +81,10 @@ func ParseRep(tokens []string) (string, error) {
 		return "", errors.New("el parámetro -path_file_ls es requerido para el reporte 'file'")
 	}
 
+	if cmd.name == "ls" && cmd.path_file_ls == "" {
+		return "", errors.New("el parámetro -path_file_ls es requerido para el reporte 'ls'")
+	}
+
 	// Aquí se puede agregar la lógica para ejecutar el comando rep con los parámetros proporcionados
 	err := commandRep(cmd)
 	if err != nil {
@@ -167,6 +171,12 @@ func commandRep(rep *REP) error {
 
 	case "file":
 		err = reports.ReportFile(mountedSb, mountedDiskPath, rep.path, rep.path_file_ls)
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return err
+		}
+	case "ls":
+		err = reports.ReportLS(mountedSb, mountedDiskPath, rep.path, rep.path_file_ls)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return err

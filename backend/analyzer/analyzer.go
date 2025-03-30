@@ -17,6 +17,9 @@ func Analyzer(input string) (string, error) {
 		return "", errors.New("no se proporcionó ningún comando")
 	}
 
+	//Transforma el primer token a minúsculas
+	tokens[0] = strings.ToLower(tokens[0])
+
 	// Switch para manejar diferentes comandos
 	switch tokens[0] {
 	case "mkdisk":
@@ -52,8 +55,11 @@ func Analyzer(input string) (string, error) {
 	case "logout":
 		// Llama a la función ParseLogout del paquete commands con los argumentos restantes
 		return commands.ParseLogout(tokens[1:])
-
 	default:
+		if tokens[0][0] == '#' {
+			// Si el primer carácter del comando es '#', se considera un comentario
+			return "", nil
+		}
 		// Si el comando no es reconocido, devuelve un error
 		return "", fmt.Errorf("comando desconocido: %s", tokens[0])
 	}
