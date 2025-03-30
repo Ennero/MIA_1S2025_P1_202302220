@@ -22,7 +22,7 @@ func (sb *SuperBlock) CreateBitMaps(path string) error {
 	}
 
 	// Crear un buffer de n '0'
-	buffer := make([]byte, sb.S_free_inodes_count)
+	buffer := make([]byte, sb.S_inodes_count)
 	for i := range buffer {
 		buffer[i] = '0'
 	}
@@ -41,7 +41,7 @@ func (sb *SuperBlock) CreateBitMaps(path string) error {
 	}
 
 	// Crear un buffer de n 'O'
-	buffer = make([]byte, sb.S_free_blocks_count)
+	buffer = make([]byte, sb.S_blocks_count)
 	for i := range buffer {
 		buffer[i] = 'O'
 	}

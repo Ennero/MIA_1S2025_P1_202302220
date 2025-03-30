@@ -1,0 +1,28 @@
+digraph G {
+	node [shape=none];
+	graph [splines=false];
+	ls_report [label=<
+		<TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="5">
+		<TR>
+			<TD BGCOLOR="lightgrey"><B>Permisos</B></TD>
+			<TD BGCOLOR="lightgrey"><B>Owner</B></TD>
+			<TD BGCOLOR="lightgrey"><B>Grupo</B></TD>
+			<TD BGCOLOR="lightgrey"><B>Size (Bytes)</B></TD>
+			<TD BGCOLOR="lightgrey"><B>Fecha Mod.</B></TD>
+			<TD BGCOLOR="lightgrey"><B>Hora Mod.</B></TD>
+			<TD BGCOLOR="lightgrey"><B>Tipo</B></TD>
+			<TD BGCOLOR="lightgrey"><B>Name</B></TD>
+		</TR>
+		<TR>
+			<TD>-rwxrwxrwx</TD>
+			<TD>root</TD>
+			<TD>root</TD>
+			<TD ALIGN="RIGHT">22</TD>
+			<TD>29/03/2025</TD>
+			<TD>20:14</TD>
+			<TD>Archivo</TD>
+			<TD>users.txt</TD>
+		</TR>
+		</TABLE>
+	>];
+}
