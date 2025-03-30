@@ -137,26 +137,26 @@ func generateTreeRecursive(
 						
 						//Recursividad para procesar los hijos del bloque de carpeta
 						for entryIdx, content := range folderBlock.B_content {
-							if content.B_inodo != -1 && string(content.B_name[:]) != "." && string(content.B_name[:]) != ".." {
+							name := strings.TrimRight(string(content.B_name[:]), "\x00")
+							if content.B_inodo != -1 && name != "." && name != ".." {
 								childInodeIndex := content.B_inodo
 								childInodeNodeID := fmt.Sprintf("inode_%d", childInodeIndex)
-								folderPort := fmt.Sprintf("i%d", entryIdx) // Port del bloque de carpeta
+								folderPort := fmt.Sprintf("i%d", entryIdx)
 								entryEdgeID := fmt.Sprintf("%s:%s -> %s", blockNodeID, folderPort, childInodeNodeID)
-
-								// Se agrega la arista entre el bloque de carpeta y el inodo hijo
+						
 								if !generatedEdges[entryEdgeID] {
-									entryName := strings.TrimRight(string(content.B_name[:]), "\x00")
-									dotContent.WriteString(fmt.Sprintf("\t%s:%s -> %s [label=\"%s\"];\n", blockNodeID, folderPort, childInodeNodeID, entryName))
+									dotContent.WriteString(fmt.Sprintf("\t%s:%s -> %s [label=\"%s\"];\n", blockNodeID, folderPort, childInodeNodeID, name))
 									generatedEdges[entryEdgeID] = true
 								}
-
-								// Genera la recursividad para el inodo hijo
+						
+								// Recursividad para procesar el inodo hijo
 								err := generateTreeRecursive(childInodeIndex, sb, diskPath, dotContent, generatedNodes, generatedEdges)
 								if err != nil {
 									fmt.Printf("Error en subárbol de inodo %d (desde bloque %d): %v\n", childInodeIndex, blockPtr, err)
 								}
 							}
 						}
+						
 					}
 				} else { // File Block
 					fileBlock := &structures.FileBlock{}
@@ -325,26 +325,40 @@ func createFolderBlockLabel(index int32, block *structures.FolderBlock) string {
 	return label.String()
 }
 
-//Genera la etiqueta HTML para el bloque de archivo
+//Genera la etiqueta HTML para el bloque de archivo (CORREGIDO)
 func createFileBlockLabel(index int32, block *structures.FileBlock) string {
 	var label strings.Builder
 	label.WriteString("<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">\n")
 	label.WriteString(fmt.Sprintf("<TR><TD BGCOLOR=\"lightgoldenrodyellow\"><B>FileBlock %d</B></TD></TR>\n", index))
-	// Mostrar solo una parte del contenido para evitar nodos enormes
+
+	// Obtener contenido y limpiar nulls explícitamente por seguridad
 	contentPreview := string(block.B_content[:])
-	maxLen := 30 // Max chars to show
+	contentPreview = strings.TrimRight(contentPreview, "\x00") // Limpiar nulls al final
+
+	maxLen := 40 // Aumentado ligeramente el límite
 	if len(contentPreview) > maxLen {
 		contentPreview = contentPreview[:maxLen] + "..."
 	}
-	// Reemplazar caracteres no imprimibles o problemáticos para HTML/DOT
-	contentPreview = strings.ReplaceAll(contentPreview, "\n", "\\n")
-	contentPreview = strings.ReplaceAll(contentPreview, "\"", "\\\"")
+
+	// 1. Escapar '&' PRIMERO
+	contentPreview = strings.ReplaceAll(contentPreview, "&", "&amp;")
+	// 2. Escapar '<' y '>'
 	contentPreview = strings.ReplaceAll(contentPreview, "<", "&lt;")
 	contentPreview = strings.ReplaceAll(contentPreview, ">", "&gt;")
-	label.WriteString(fmt.Sprintf("<TR><TD>%s</TD></TR>\n", contentPreview))
+	// 3. Reemplazar saltos de línea con <br> (HTML estándar)
+	contentPreview = strings.ReplaceAll(contentPreview, "\n", " ")
+	// --- Fin Corrección ---
+
+	// Eliminar un <br> final si el contenido original terminaba en \n
+	contentPreview = strings.TrimSuffix(contentPreview, " ")
+
+	// Añadir el contenido procesado a la etiqueta, alineado a la izquierda
+	label.WriteString(fmt.Sprintf("<TR><TD ALIGN=\"LEFT\">%s</TD></TR>\n", contentPreview))
 	label.WriteString("</TABLE>")
 	return label.String()
 }
+
+
 
 //Genera la etiqueta HTML para el bloque puntero
 func createPointerBlockLabel(index int32, block *structures.PointerBlock) string {
