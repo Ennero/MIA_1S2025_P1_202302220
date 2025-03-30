@@ -3,12 +3,12 @@ digraph G {
 	tabla [label=<
 		<table border="0" cellborder="1" cellspacing="0">
 			<tr><td colspan="2" bgcolor="gray"><b> REPORTE SUPERBLOQUE </b></td></tr>
-			<tr><td bgcolor="lightblue"><b>s_inodes_count</b></td><td>6</td></tr>
-			<tr><td bgcolor="lightgreen"><b>s_blocks_count</b></td><td>6</td></tr>
+			<tr><td bgcolor="lightblue"><b>s_inodes_count</b></td><td>3691</td></tr>
+			<tr><td bgcolor="lightgreen"><b>s_blocks_count</b></td><td>11073</td></tr>
 			<tr><td bgcolor="lightblue"><b>s_free_inodes_count</b></td><td>3685</td></tr>
 			<tr><td bgcolor="lightgreen"><b>s_free_blocks_count</b></td><td>11067</td></tr>
-			<tr><td bgcolor="lightgray"><b>s_mtime</b></td><td>2025-03-24 23:39:12 -0600 CST</td></tr>
-			<tr><td bgcolor="lightgray"><b>s_umtime</b></td><td>2025-03-24 23:39:12 -0600 CST</td></tr>
+			<tr><td bgcolor="lightgray"><b>s_mtime</b></td><td>2025-03-30 00:41:04 -0600 CST</td></tr>
+			<tr><td bgcolor="lightgray"><b>s_umtime</b></td><td>2025-03-30 00:41:04 -0600 CST</td></tr>
 			<tr><td bgcolor="lightgray"><b>s_mnt_count</b></td><td>1</td></tr>
 			<tr><td bgcolor="lightgray"><b>s_magic</b></td><td>61267</td></tr>
 			<tr><td bgcolor="lightblue"><b>s_inode_size</b></td><td>88</td></tr>

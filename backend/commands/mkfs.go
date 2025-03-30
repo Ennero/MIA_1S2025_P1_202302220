@@ -19,8 +19,8 @@ type MKFS struct {
 }
 
 /*
-    mkfs -id=vd1 -type=full
-    mkfs -id=vd2
+   mkfs -id=vd1 -type=full
+   mkfs -id=vd2
 */
 
 func ParseMkfs(tokens []string) (string, error) {
@@ -83,7 +83,6 @@ func ParseMkfs(tokens []string) (string, error) {
 		fmt.Println("Error:", err)
 		return "", err
 	}
-
 
 	return fmt.Sprintf("MKFS: Sistema de archivos creado exitosamente\n"+
 		"-> ID: %s\n"+
@@ -165,19 +164,28 @@ func createSuperBlock(partition *structures.Partition, n int32) *structures.Supe
 	// Bloques
 	block_start := inode_start + (int32(binary.Size(structures.Inode{})) * n) // n indica la cantidad de inodos, solo que aquí indica la cantidad de estructuras Inode
 
+	inodeSize := int32(binary.Size(structures.Inode{}))
+	blockSize := int32(binary.Size(structures.FileBlock{}))
+
+	// Validar que los tamaños no sean cero para evitar división por cero
+	if inodeSize == 0 || blockSize == 0 {
+		fmt.Println("Error crítico: Tamaño de Inodo o Bloque es cero.")
+		return nil // O pánico, ya que esto no debería ocurrir
+	}
+
 	// Crear un nuevo superbloque
 	superBlock := &structures.SuperBlock{
 		S_filesystem_type:   2,
-		S_inodes_count:      0,
-		S_blocks_count:      0,
+		S_inodes_count:      n,
+		S_blocks_count:      3*n,
 		S_free_inodes_count: int32(n),
 		S_free_blocks_count: int32(n * 3),
 		S_mtime:             float32(time.Now().Unix()),
 		S_umtime:            float32(time.Now().Unix()),
 		S_mnt_count:         1,
 		S_magic:             0xEF53,
-		S_inode_size:        int32(binary.Size(structures.Inode{})),
-		S_block_size:        int32(binary.Size(structures.FileBlock{})),
+		S_inode_size:        inodeSize,
+		S_block_size:        blockSize,
 		S_first_ino:         inode_start,
 		S_first_blo:         block_start,
 		S_bm_inode_start:    bm_inode_start,

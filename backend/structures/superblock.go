@@ -191,15 +191,8 @@ func (sb *SuperBlock) CreateFolder(path string, parentsDir []string, destDir str
 		return sb.createFolderInInode(path, 0, parentsDir, destDir)
 	}
 
-	// Iterar sobre cada inodo ya que se necesita buscar el inodo padre
-	for i := int32(0); i < sb.S_inodes_count; i++ {
-		err := sb.createFolderInInode(path, i, parentsDir, destDir)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	fmt.Printf("CreateFolder: Llamando a createFolderInInode desde la raíz (0) para path: %s (padres: %v, destino: %s)\n", path, parentsDir, destDir) // Log de depuración
+	return sb.createFolderInInode(path, 0, parentsDir, destDir)
 }
 
 

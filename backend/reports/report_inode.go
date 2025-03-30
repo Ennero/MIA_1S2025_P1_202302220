@@ -20,19 +20,56 @@ func ReportInode(superblock *structures.SuperBlock, diskPath string, path string
 	// Obtener el nombre base del archivo sin la extensión
 	dotFileName, outputImage := utils.GetFileNames(path)
 
+	// Verificar si el superbloque es válido
+	inodeBitmapSize := superblock.S_inodes_count // Total de inodos posibles
+	if inodeBitmapSize <= 0 {
+		return fmt.Errorf("s_inodes_count (total) es inválido: %d", inodeBitmapSize)
+	}
+
+	inodeBitmap := make([]byte, inodeBitmapSize)
+	file, err := os.Open(diskPath)
+	if err != nil {
+		return fmt.Errorf("error al abrir disco para leer bitmap de inodos: %w", err)
+	}
+	// Asegurarse de buscar desde el inicio del archivo para el offset del bitmap
+	_, err = file.Seek(int64(superblock.S_bm_inode_start), 0) // SEEK_SET = 0
+	if err != nil {
+		file.Close()
+		return fmt.Errorf("error al buscar inicio de bitmap de inodos: %w", err)
+	}
+	bytesRead, err := file.Read(inodeBitmap)
+	file.Close() // Cerrar el archivo después de leer
+	if err != nil || int32(bytesRead) != inodeBitmapSize {
+		return fmt.Errorf("error al leer bitmap de inodos completo (leídos %d, esperados %d): %w", bytesRead, inodeBitmapSize, err)
+	}
+
 	// Iniciar el contenido DOT
 	dotContent := `digraph G {
 		rankdir=LR;
         node [shape=plaintext]
     `
 
+	var lastValidInodeIndex int32 = -1 // Para rastrear el último inodo VÁLIDO
+
 	// Iterar sobre cada inodo
 	for i := int32(0); i < superblock.S_inodes_count; i++ {
+
+		if inodeBitmap[i] != '1' {
+			continue // Saltar
+		}
+
+		currentIndex := i // Guardar el índice actual válido
+
 		inode := &structures.Inode{}
 		// Deserializar el inodo
-		err := inode.Deserialize(diskPath, int64(superblock.S_inode_start+(i*superblock.S_inode_size)))
+		inodeOffset := int64(superblock.S_inode_start + (currentIndex * superblock.S_inode_size))
+		err := inode.Deserialize(diskPath, inodeOffset)
 		if err != nil {
-			return err
+			// Si está marcado como usado pero falla la deserialización, es un error del FS
+			fmt.Printf("Error deserializando inodo %d (marcado como usado): %v. Generando nodo de error.\n", currentIndex, err)
+			dotContent += fmt.Sprintf("\tinode%d [label=\"Error Inodo %d\", shape=box, style=filled, fillcolor=red];\n", currentIndex, currentIndex)
+			lastValidInodeIndex = -1 // No conectar desde/hacia nodos de error
+			continue                 // Continuar al siguiente índice ----------------------------------------------------------------------------------------------
 		}
 
 		// Convertir tiempos a string
@@ -56,50 +93,50 @@ func ReportInode(superblock *structures.SuperBlock, diskPath string, path string
             `, i, i, inode.I_uid, inode.I_gid, inode.I_size, atime, ctime, mtime, rune(inode.I_type[0]), string(inode.I_perm[:]))
 
 		// Agregar los bloques directos a la tabla hasta el índice 11
-		for j, block := range inode.I_block {
-			if j > 11 {
-				break
+		for j := 0; j < 15; j++ {
+			bgColor := "lightyellow"
+			labelPrefix := fmt.Sprintf("Directo [%d]", j)
+			if j == 12 {
+				bgColor = "orange"
+				labelPrefix = "Indirecto [12]"
 			}
-			dotContent += fmt.Sprintf(`<tr><td bgcolor="lightyellow"><b>%d</b></td><td>%d</td></tr>`, j+1, block)
+			if j == 13 {
+				bgColor = "red"
+				labelPrefix = "Doble Ind. [13]"
+			}
+			if j == 14 {
+				bgColor = "purple"
+				labelPrefix = "Triple Ind. [14]"
+			}
+			dotContent += fmt.Sprintf(`<tr><td bgcolor="%s"><b>%s</b></td><td>%d</td></tr>`, bgColor, labelPrefix, inode.I_block[j])
 		}
+		dotContent += `</table>>];` // Cerrar label del nodo
 
-		// Agregar los bloques indirectos a la tabla
-		dotContent += fmt.Sprintf(`
-    <tr><td colspan="2" bgcolor="orange"><b>BLOQUE INDIRECTO</b></td></tr>
-    <tr><td bgcolor="lightyellow">%d</td><td>%d</td></tr>
-    <tr><td colspan="2" bgcolor="red"><b>BLOQUE INDIRECTO DOBLE</b></td></tr>
-    <tr><td bgcolor="lightyellow">%d</td><td>%d</td></tr>
-    <tr><td colspan="2" bgcolor="purple"><b>BLOQUE INDIRECTO TRIPLE</b></td></tr>
-    <tr><td bgcolor="lightyellow">%d</td><td>%d</td></tr>
-</table>>];`, 13, inode.I_block[12], 14, inode.I_block[13], 15, inode.I_block[14])
-
-		// Agregar enlace al siguiente inodo si no es el último
-		if i < superblock.S_inodes_count-1 {
-			dotContent += fmt.Sprintf("inode%d -> inode%d;\n", i, i+1)
+		if lastValidInodeIndex != -1 {
+			// Conectar el VÁLIDO anterior con el VÁLIDO actual
+			dotContent += fmt.Sprintf("\n\tinode%d -> inode%d;", lastValidInodeIndex, currentIndex)
 		}
+		lastValidInodeIndex = currentIndex // Actualizar el último índice válido encontrado
 	}
 
-	// Cerrar el contenido DOT
-	dotContent += "}"
+	dotContent += "\n}" // Cerrar el grafo
 
-	// Crear el archivo DOT
+	// --- El resto de la función (escribir DOT, ejecutar dot) permanece igual ---
 	dotFile, err := os.Create(dotFileName)
 	if err != nil {
 		return err
 	}
 	defer dotFile.Close()
-
-	// Escribir el contenido DOT en el archivo
 	_, err = dotFile.WriteString(dotContent)
 	if err != nil {
 		return err
 	}
 
-	// Generar la imagen con Graphviz
 	cmd := exec.Command("dot", "-Tpng", dotFileName, "-o", outputImage)
-	err = cmd.Run()
+	cmdOutput, err := cmd.CombinedOutput()
 	if err != nil {
-		return err
+		fmt.Printf("Error ejecutando Graphviz para ReportInode:\n%s\n", string(cmdOutput))
+		return fmt.Errorf("error al ejecutar Graphviz: %w", err)
 	}
 
 	fmt.Println("Imagen de los inodos generada:", outputImage)
