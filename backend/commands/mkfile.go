@@ -369,7 +369,6 @@ func findEntryInParent(parentInode *structures.Inode, entryName string, sb *stru
 	return
 }
 
-// Busca un slot libre
 func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex int32, sb *structures.SuperBlock, partitionPath string) error {
 
 	parentInode := &structures.Inode{}
@@ -377,47 +376,243 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 	if err := parentInode.Deserialize(partitionPath, parentOffset); err != nil {
 		return fmt.Errorf("no se pudo leer inodo padre %d para añadir entrada: %w", parentInodeIndex, err)
 	}
+	if parentInode.I_type[0] != '0' {
+		return fmt.Errorf("el inodo padre %d no es un directorio", parentInodeIndex)
+	}
 
-	// Buscar un slot libre en los bloques existentes del padre
-	for _, blockPtr := range parentInode.I_block {
+	// --- PASO 1: Buscar slot libre en bloques existentes (Directos e Indirectos Simples) ---
+	fmt.Printf("Buscando slot libre en bloques existentes del padre %d...\n", parentInodeIndex)
+	// Función auxiliar para buscar en un bloque carpeta
+	findAndAddInFolderBlock := func(blockPtr int32) (bool, error) {
 		if blockPtr == -1 {
-			continue
-		}
+			return false, nil
+		} // No es un bloque válido
 		if blockPtr < 0 || blockPtr >= sb.S_blocks_count {
-			continue
+			fmt.Printf("Advertencia: Puntero inválido %d encontrado al buscar slot libre.\n", blockPtr)
+			return false, nil // Saltar puntero inválido
 		}
 
 		folderBlock := &structures.FolderBlock{}
 		blockOffset := int64(sb.S_block_start) + int64(blockPtr)*int64(sb.S_block_size)
 		if err := folderBlock.Deserialize(partitionPath, blockOffset); err != nil {
 			fmt.Printf("Advertencia: No se pudo leer bloque %d del padre %d para añadir entrada\n", blockPtr, parentInodeIndex)
-			continue
+			return false, nil // No es un error fatal, podría estar en otro bloque
 		}
 
-		for i := 0; i < 4; i++ {
-			if folderBlock.B_content[i].B_inodo == -1 {
+		// Buscar slot libre (-1)
+		for i := 0; i < len(folderBlock.B_content); i++ {
+			// Omitir '.' y '..' (aunque un bloque nuevo no debería tenerlos en índice > 1)
+			// La lógica original que omitía i<2 era incorrecta si el bloque no era el primero.
+			// Lo seguro es verificar el nombre.
+			nameBytes := folderBlock.B_content[i].B_name[:]
+			isDot := (nameBytes[0] == '.' && (len(nameBytes) < 2 || nameBytes[1] == 0))
+			isDotDot := (nameBytes[0] == '.' && nameBytes[1] == '.' && (len(nameBytes) < 3 || nameBytes[2] == 0))
 
-				fmt.Printf("Encontrado slot libre %d en bloque %d del padre %d\n", i, blockPtr, parentInodeIndex)
+			if folderBlock.B_content[i].B_inodo == -1 && !isDot && !isDotDot { // Slot libre encontrado!
+				fmt.Printf("Encontrado slot libre %d en bloque existente %d del padre %d\n", i, blockPtr, parentInodeIndex)
 				folderBlock.B_content[i].B_inodo = entryInodeIndex
 				copy(folderBlock.B_content[i].B_name[:], entryName)
-
-				if err := folderBlock.Serialize(partitionPath, blockOffset); err != nil {
-					return fmt.Errorf("falló al escribir la nueva entrada en el bloque %d: %w", blockPtr, err)
+				if err := folderBlock.Serialize(partitionPath, blockOffset); err != nil { // Serializar bloque modificado
+					return false, fmt.Errorf("falló al escribir la nueva entrada en el bloque existente %d: %w", blockPtr, err)
 				}
-
-				// Actualizar tiempo de modificación y acceso del inodo padre
+				// Actualizar tiempos del padre y serializar padre
 				currentTime := float32(time.Now().Unix())
 				parentInode.I_mtime = currentTime
 				parentInode.I_atime = currentTime
 				if err := parentInode.Serialize(partitionPath, parentOffset); err != nil {
-					return fmt.Errorf("falló al actualizar tiempos del inodo padre %d: %w", parentInodeIndex, err)
+					return false, fmt.Errorf("falló al actualizar tiempos del inodo padre %d tras añadir en bloque existente: %w", parentInodeIndex, err)
 				}
-
-				return nil
+				return true, nil // Éxito! Slot encontrado y usado.
 			}
 		}
+		return false, nil // No se encontró slot en este bloque
 	}
-	return fmt.Errorf("no se encontró espacio en los bloques existentes del directorio padre (inodo %d)", parentInodeIndex)
+
+	// Buscar en bloques directos
+	for k := 0; k < 12; k++ {
+		found, err := findAndAddInFolderBlock(parentInode.I_block[k])
+		if err != nil {
+			return err
+		} // Error fatal durante la búsqueda/escritura
+		if found {
+			return nil
+		} // Entrada añadida exitosamente
+	}
+
+	// Buscar en bloques apuntados por indirecto simple
+	if parentInode.I_block[12] != -1 {
+		fmt.Printf("Buscando slot libre en bloques de indirección simple (L1 en %d)...\n", parentInode.I_block[12])
+		l1Block := &structures.PointerBlock{}
+		l1Offset := int64(sb.S_block_start) + int64(parentInode.I_block[12])*int64(sb.S_block_size)
+		if err := l1Block.Deserialize(partitionPath, l1Offset); err == nil {
+			for _, folderBlockPtr := range l1Block.P_pointers {
+				found, err := findAndAddInFolderBlock(folderBlockPtr)
+				if err != nil {
+					return err
+				}
+				if found {
+					return nil
+				}
+			}
+		} else {
+			fmt.Printf("Advertencia: No se pudo leer el bloque de punteros L1 %d\n", parentInode.I_block[12])
+		}
+	}
+	// TODO: Añadir lógica similar para buscar en indirección doble y triple si se implementan
+
+	// --- PASO 2: Si no se encontró slot, buscar un PUNTERO libre para un NUEVO bloque ---
+	fmt.Printf("No se encontró slot libre en bloques existentes del padre %d. Buscando puntero libre...\n", parentInodeIndex)
+
+	// Función auxiliar para asignar y preparar un nuevo bloque carpeta
+	allocateAndPrepareNewFolderBlock := func() (int32, *structures.FolderBlock, error) {
+		if sb.S_free_blocks_count < 1 {
+			return -1, nil, errors.New("no hay bloques libres para expandir directorio")
+		}
+		// Asignar bloque
+		newBlockIndex := (sb.S_first_blo - sb.S_block_start) / sb.S_block_size
+		if newBlockIndex >= sb.S_blocks_count {
+			return -1, nil, errors.New("error interno: S_first_blo fuera de límites al asignar nuevo bloque")
+		}
+		// Actualizar bitmap y SB
+		err := sb.UpdateBitmapBlock(partitionPath, newBlockIndex)
+		if err != nil {
+			return -1, nil, fmt.Errorf("error bitmap para nuevo bloque dir %d: %w", newBlockIndex, err)
+		}
+		sb.S_free_blocks_count--
+		sb.S_first_blo += sb.S_block_size
+		// Crear, inicializar y serializar bloque vacío
+		newFolderBlock := &structures.FolderBlock{}
+		for i := range newFolderBlock.B_content {
+			newFolderBlock.B_content[i].B_inodo = -1
+		}
+		newBlockOffset := int64(sb.S_block_start) + int64(newBlockIndex)*int64(sb.S_block_size)
+		if err := newFolderBlock.Serialize(partitionPath, newBlockOffset); err != nil {
+			// Revertir asignación? Complejo. Fallar es más seguro.
+			return -1, nil, fmt.Errorf("falló al inicializar/serializar nuevo bloque dir %d: %w", newBlockIndex, err)
+		}
+		fmt.Printf("Nuevo bloque carpeta vacío asignado y serializado en índice %d\n", newBlockIndex)
+		return newBlockIndex, newFolderBlock, nil // Devuelve índice Y el bloque en memoria (vacío)
+	}
+
+	// Buscar en punteros directos
+	for k := 0; k < 12; k++ {
+		if parentInode.I_block[k] == -1 {
+			fmt.Printf("Encontrado puntero directo libre en I_block[%d]. Asignando nuevo bloque carpeta...\n", k)
+			newBlockIndex, newFolderBlock, err := allocateAndPrepareNewFolderBlock()
+			if err != nil {
+				return err
+			}
+
+			// Actualizar inodo padre para apuntar al nuevo bloque
+			parentInode.I_block[k] = newBlockIndex
+			currentTime := float32(time.Now().Unix())
+			parentInode.I_mtime = currentTime
+			parentInode.I_atime = currentTime
+			if err := parentInode.Serialize(partitionPath, parentOffset); err != nil {
+				return fmt.Errorf("falló al actualizar I_block[%d] del padre %d: %w", k, parentInodeIndex, err)
+			}
+
+			// Añadir entrada al nuevo bloque (que está en memoria newFolderBlock)
+			// Usar índice 0 porque está recién creado y vacío (sin . o .. todavía)
+			newFolderBlock.B_content[0].B_inodo = entryInodeIndex
+			copy(newFolderBlock.B_content[0].B_name[:], entryName)
+			newBlockOffset := int64(sb.S_block_start) + int64(newBlockIndex)*int64(sb.S_block_size)
+			if err := newFolderBlock.Serialize(partitionPath, newBlockOffset); err != nil { // Sobrescribir con la entrada añadida
+				return fmt.Errorf("falló al serializar nuevo bloque dir %d con la entrada: %w", newBlockIndex, err)
+			}
+			fmt.Printf("Nueva entrada '%s' -> %d añadida al nuevo bloque %d vía puntero directo.\n", entryName, entryInodeIndex, newBlockIndex)
+			return nil // Éxito
+		}
+	}
+
+	// Buscar en puntero indirecto simple
+	fmt.Println("Punteros directos llenos. Verificando indirección simple (I_block[12])...")
+	l1Ptr := parentInode.I_block[12]
+	var l1Block *structures.PointerBlock
+	var l1BlockIndex int32
+
+	if l1Ptr == -1 { // Necesitamos crear el bloque L1
+		fmt.Println("I_block[12] no existe. Creando bloque de punteros L1...")
+		if sb.S_free_blocks_count < 2 { // Necesitamos espacio para L1 y para el nuevo FolderBlock
+			return errors.New("no hay suficientes bloques libres para crear bloque L1 y bloque de carpeta")
+		}
+		// Asignar bloque L1
+		l1BlockIndex = (sb.S_first_blo - sb.S_block_start) / sb.S_block_size
+		if l1BlockIndex >= sb.S_blocks_count {
+			return errors.New("error interno: S_first_blo fuera de límites al asignar L1")
+		}
+		err := sb.UpdateBitmapBlock(partitionPath, l1BlockIndex)
+		if err != nil {
+			return fmt.Errorf("error bitmap para bloque L1 %d: %w", l1BlockIndex, err)
+		}
+		sb.S_free_blocks_count--
+		sb.S_first_blo += sb.S_block_size
+
+		// Actualizar inodo padre y serializarlo
+		parentInode.I_block[12] = l1BlockIndex
+		currentTime := float32(time.Now().Unix())
+		parentInode.I_mtime = currentTime
+		parentInode.I_atime = currentTime
+		if err := parentInode.Serialize(partitionPath, parentOffset); err != nil {
+			return fmt.Errorf("falló al actualizar I_block[12] del padre %d: %w", parentInodeIndex, err)
+		}
+
+		// Crear e inicializar bloque L1 en memoria
+		l1Block = &structures.PointerBlock{}
+		for i := range l1Block.P_pointers {
+			l1Block.P_pointers[i] = -1
+		}
+		fmt.Printf("Bloque punteros L1 creado en índice %d\n", l1BlockIndex)
+	} else { // El bloque L1 ya existe
+		l1BlockIndex = l1Ptr
+		fmt.Printf("Bloque punteros L1 ya existe en índice %d. Cargando...\n", l1BlockIndex)
+		l1Block = &structures.PointerBlock{}
+		l1Offset := int64(sb.S_block_start) + int64(l1BlockIndex)*int64(sb.S_block_size)
+		if err := l1Block.Deserialize(partitionPath, l1Offset); err != nil {
+			return fmt.Errorf("no se pudo leer bloque de punteros L1 %d existente: %w", l1BlockIndex, err)
+		}
+	}
+
+	// Buscar un slot libre (-1) en el bloque L1
+	foundL1PointerSlot := -1
+	for k := 0; k < len(l1Block.P_pointers); k++ {
+		if l1Block.P_pointers[k] == -1 {
+			foundL1PointerSlot = k
+			break
+		}
+	}
+
+	if foundL1PointerSlot != -1 {
+		fmt.Printf("Encontrado puntero libre en L1[%d]. Asignando nuevo bloque carpeta...\n", foundL1PointerSlot)
+		// Asignar el nuevo bloque carpeta (ya verifica espacio libre)
+		newBlockIndex, newFolderBlock, err := allocateAndPrepareNewFolderBlock()
+		if err != nil {
+			return err
+		}
+
+		// Actualizar el bloque L1 para que apunte al nuevo bloque
+		l1Block.P_pointers[foundL1PointerSlot] = newBlockIndex
+		l1Offset := int64(sb.S_block_start) + int64(l1BlockIndex)*int64(sb.S_block_size)
+		if err := l1Block.Serialize(partitionPath, l1Offset); err != nil {
+			// Revertir? Complejo.
+			return fmt.Errorf("falló al serializar bloque puntero L1 %d actualizado: %w", l1BlockIndex, err)
+		}
+
+		// Añadir entrada al nuevo bloque carpeta
+		newFolderBlock.B_content[0].B_inodo = entryInodeIndex
+		copy(newFolderBlock.B_content[0].B_name[:], entryName)
+		newBlockOffset := int64(sb.S_block_start) + int64(newBlockIndex)*int64(sb.S_block_size)
+		if err := newFolderBlock.Serialize(partitionPath, newBlockOffset); err != nil {
+			return fmt.Errorf("falló al serializar nuevo bloque dir %d con la entrada: %w", newBlockIndex, err)
+		}
+		fmt.Printf("Nueva entrada '%s' -> %d añadida al nuevo bloque %d vía puntero indirecto simple.\n", entryName, entryInodeIndex, newBlockIndex)
+		return nil // Éxito
+	}
+
+	// --- PASO 3: Si no se encontró slot libre NI puntero libre (Directo o Simple Indirecto) ---
+	// Aquí iría la lógica para buscar/crear bloques indirectos DOBLES y TRIPLES para el directorio padre.
+	// Por simplicidad, retornamos error.
+	return fmt.Errorf("directorio padre (inodo %d) lleno: no hay espacio en bloques existentes ni en punteros directos/indirectos simples. Indirección doble/triple no implementada para directorios", parentInodeIndex)
 }
 
 func allocateDataBlocks(contentBytes []byte, fileSize int32, sb *structures.SuperBlock, partitionPath string) ([15]int32, error) {
