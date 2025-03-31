@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-
 	structures "backend/structures"
 	utils "backend/utils"
 )
@@ -26,8 +25,8 @@ func ReportTree(sb *structures.SuperBlock, diskPath string, outputPath string) e
 
 	var dotContent strings.Builder
 	dotContent.WriteString("digraph FileSystemTree {\n")
-	dotContent.WriteString("\trankdir=LR;\n")                  // Layout de izquierda a derecha
-	dotContent.WriteString("\tnode [shape=none, margin=0];\n") // Usaremos labels HTML
+	dotContent.WriteString("\trankdir=LR;\n")                 
+	dotContent.WriteString("\tnode [shape=none, margin=0];\n") // Usaré labels HTML
 
 	// Recorrer el árbol de inodos
 	err = generateTreeRecursive(0, sb, diskPath, &dotContent, generatedNodes, generatedEdges)
@@ -36,7 +35,7 @@ func ReportTree(sb *structures.SuperBlock, diskPath string, outputPath string) e
 		return fmt.Errorf("error generando el árbol de inodos: %v", err)
 	}
 
-	dotContent.WriteString("}\n") // Close digraph
+	dotContent.WriteString("}\n")
 
 	// --- Guardar y Ejecutar Graphviz ---
 	dotFile, err := os.Create(dotFileName)
@@ -107,22 +106,18 @@ func generateTreeRecursive(
 			fmt.Printf("Puntero de bloque inválido (%d) encontrado en inodo %d, i_block[%d]. Saltando.\n", blockPtr, inodeIndex, k)
 			continue
 		}
-
 		blockNodeID := fmt.Sprintf("block_%d", blockPtr)
-		inodePort := fmt.Sprintf("p%d", k) // Port del inodo
+		inodePort := fmt.Sprintf("p%d", k)                                        // Port del inodo
 		edgeID := fmt.Sprintf("%s:%s -> %s", inodeNodeID, inodePort, blockNodeID) // ID de la arista
-
 		// Genera la arista entre el inodo y el bloque
 		if !generatedEdges[edgeID] {
 			dotContent.WriteString(fmt.Sprintf("\t%s:%s -> %s [label=\"i_block[%d]\"];\n", inodeNodeID, inodePort, blockNodeID, k))
 			generatedEdges[edgeID] = true
 		}
-
 		// Genera el bloque del Inodo
 		if !generatedNodes[blockNodeID] {
 			generatedNodes[blockNodeID] = true // Se marca como ya generado
 			blockOffset := int64(sb.S_block_start) + int64(blockPtr)*int64(sb.S_block_size)
-
 			// Determina el tipo de bloque
 			switch {
 			case k < 12: // Bloques directos porque no tengo indirectos
@@ -134,7 +129,6 @@ func generateTreeRecursive(
 					} else {
 						label := createFolderBlockLabel(blockPtr, folderBlock)
 						dotContent.WriteString(fmt.Sprintf("\t%s [label=<\n%s\n>];\n", blockNodeID, label))
-						
 						//Recursividad para procesar los hijos del bloque de carpeta
 						for entryIdx, content := range folderBlock.B_content {
 							name := strings.TrimRight(string(content.B_name[:]), "\x00")
@@ -143,12 +137,10 @@ func generateTreeRecursive(
 								childInodeNodeID := fmt.Sprintf("inode_%d", childInodeIndex)
 								folderPort := fmt.Sprintf("i%d", entryIdx)
 								entryEdgeID := fmt.Sprintf("%s:%s -> %s", blockNodeID, folderPort, childInodeNodeID)
-						
 								if !generatedEdges[entryEdgeID] {
 									dotContent.WriteString(fmt.Sprintf("\t%s:%s -> %s [label=\"%s\"];\n", blockNodeID, folderPort, childInodeNodeID, name))
 									generatedEdges[entryEdgeID] = true
 								}
-						
 								// Recursividad para procesar el inodo hijo
 								err := generateTreeRecursive(childInodeIndex, sb, diskPath, dotContent, generatedNodes, generatedEdges)
 								if err != nil {
@@ -156,7 +148,7 @@ func generateTreeRecursive(
 								}
 							}
 						}
-						
+
 					}
 				} else { // File Block
 					fileBlock := &structures.FileBlock{}
@@ -168,8 +160,6 @@ func generateTreeRecursive(
 						dotContent.WriteString(fmt.Sprintf("\t%s [label=<\n%s\n>];\n", blockNodeID, label))
 					}
 				}
-
-
 				// Bloques directos terminan aquí------------------------------------------------------------------------------------------------------------
 			case k == 12:
 				pointerBlock := &structures.PointerBlock{}
@@ -179,7 +169,6 @@ func generateTreeRecursive(
 				} else {
 					label := createPointerBlockLabel(blockPtr, pointerBlock)
 					dotContent.WriteString(fmt.Sprintf("\t%s [label=<\n%s\n>];\n", blockNodeID, label))
-
 					// Apuntador a bloques de datos
 					for ptrIdx, dataBlockPtr := range pointerBlock.P_pointers {
 						if dataBlockPtr == -1 {
@@ -189,17 +178,14 @@ func generateTreeRecursive(
 							fmt.Printf("Puntero de bloque inválido (%d) encontrado en PointerBlock %d, P_pointers[%d]. Saltando.\n", dataBlockPtr, blockPtr, ptrIdx)
 							continue
 						}
-
 						dataBlockNodeID := fmt.Sprintf("block_%d", dataBlockPtr)
 						pointerPort := fmt.Sprintf("ptr%d", ptrIdx) // Puerto del bloque puntero
 						ptrEdgeID := fmt.Sprintf("%s:%s -> %s", blockNodeID, pointerPort, dataBlockNodeID)
-
 						// Añade la arista entre el bloque puntero y el bloque de datos
 						if !generatedEdges[ptrEdgeID] {
 							dotContent.WriteString(fmt.Sprintf("\t%s:%s -> %s [label=\"ptr[%d]\"];\n", blockNodeID, pointerPort, dataBlockNodeID, ptrIdx))
 							generatedEdges[ptrEdgeID] = true
 						}
-
 						err := ensureBlockNodeExists(dataBlockPtr, inode.I_type[0], sb, diskPath, dotContent, generatedNodes, generatedEdges)
 						if err != nil {
 							fmt.Printf("Error asegurando nodo para bloque de datos %d (desde bloque puntero %d): %v\n", dataBlockPtr, blockPtr, err)
@@ -207,18 +193,16 @@ func generateTreeRecursive(
 					}
 				}
 				// Aquí sería lo de los bloques indirectos dobles y triples pero no lo tengo
-
 			default:
 				// Handle double/triple indirect if necessary
 				dotContent.WriteString(fmt.Sprintf("\t%s [label=\"PointerBlock %d (Indirecto >1)\", shape=box, style=filled, fillcolor=lightgrey];\n", blockNodeID, blockPtr))
-
 			}
-		} 
+		}
 	}
 	return nil
 }
 
-//Función para asegurarse que le bloque existe y generar su nodo que se usa para bloques indirectos
+// Función para asegurarse que le bloque existe y generar su nodo que se usa para bloques indirectos
 func ensureBlockNodeExists(
 	blockIndex int32,
 	originalInodeType byte, // Tipo original del inodo (0=folder, 1=file)
@@ -234,7 +218,7 @@ func ensureBlockNodeExists(
 	if generatedNodes[blockNodeID] {
 		return nil
 	}
-	generatedNodes[blockNodeID] = true // Marca que ya 
+	generatedNodes[blockNodeID] = true // Marca que ya
 
 	blockOffset := int64(sb.S_block_start) + int64(blockIndex)*int64(sb.S_block_size)
 
@@ -283,7 +267,7 @@ func ensureBlockNodeExists(
 	return nil
 }
 
-//Genera la etiqueta HTML para el inodo
+// Genera la etiqueta HTML para el inodo
 func createInodeLabel(index int32, inode *structures.Inode) string {
 	var label strings.Builder
 	label.WriteString("<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">\n")
@@ -310,7 +294,7 @@ func createInodeLabel(index int32, inode *structures.Inode) string {
 	return label.String()
 }
 
-//Genera la etiqueta HTML para el bloque de carpeta
+// Genera la etiqueta HTML para el bloque de carpeta
 func createFolderBlockLabel(index int32, block *structures.FolderBlock) string {
 	var label strings.Builder
 	label.WriteString("<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">\n")
@@ -318,14 +302,13 @@ func createFolderBlockLabel(index int32, block *structures.FolderBlock) string {
 	label.WriteString("<TR><TD><B>Index</B></TD><TD><B>Name</B></TD><TD><B>Inode Ptr</B></TD></TR>\n")
 	for i, content := range block.B_content {
 		name := strings.TrimRight(string(content.B_name[:]), "\x00")
-		// Add port 'i' followed by index
 		label.WriteString(fmt.Sprintf("<TR><TD>%d</TD><TD PORT=\"i%d\">%s</TD><TD>%d</TD></TR>\n", i, i, name, content.B_inodo))
 	}
 	label.WriteString("</TABLE>")
 	return label.String()
 }
 
-//Genera la etiqueta HTML para el bloque de archivo (CORREGIDO)
+// Genera la etiqueta HTML para el bloque de archivo
 func createFileBlockLabel(index int32, block *structures.FileBlock) string {
 	var label strings.Builder
 	label.WriteString("<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">\n")
@@ -340,33 +323,24 @@ func createFileBlockLabel(index int32, block *structures.FileBlock) string {
 		contentPreview = contentPreview[:maxLen] + "..."
 	}
 
-	// 1. Escapar '&' PRIMERO
+	// Capeando un par de caracteres especiales
 	contentPreview = strings.ReplaceAll(contentPreview, "&", "&amp;")
-	// 2. Escapar '<' y '>'
 	contentPreview = strings.ReplaceAll(contentPreview, "<", "&lt;")
 	contentPreview = strings.ReplaceAll(contentPreview, ">", "&gt;")
-	// 3. Reemplazar saltos de línea con <br> (HTML estándar)
-	contentPreview = strings.ReplaceAll(contentPreview, "\n", " ")
-	// --- Fin Corrección ---
-
-	// Eliminar un <br> final si el contenido original terminaba en \n
+	contentPreview = strings.ReplaceAll(contentPreview, "\n", " ") // Reemplazar saltos de línea por espacios
 	contentPreview = strings.TrimSuffix(contentPreview, " ")
-
 	// Añadir el contenido procesado a la etiqueta, alineado a la izquierda
 	label.WriteString(fmt.Sprintf("<TR><TD ALIGN=\"LEFT\">%s</TD></TR>\n", contentPreview))
 	label.WriteString("</TABLE>")
 	return label.String()
 }
 
-
-
-//Genera la etiqueta HTML para el bloque puntero
+// Genera la etiqueta HTML para el bloque puntero
 func createPointerBlockLabel(index int32, block *structures.PointerBlock) string {
 	var label strings.Builder
 	label.WriteString("<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">\n")
 	label.WriteString(fmt.Sprintf("<TR><TD COLSPAN=\"2\" BGCOLOR=\"lightgrey\"><B>PointerBlock %d</B></TD></TR>\n", index))
 	for i, ptr := range block.P_pointers {
-		// Add port 'ptr' followed by index
 		label.WriteString(fmt.Sprintf("<TR><TD ALIGN=\"LEFT\" PORT=\"ptr%d\">P_POINTER[%d]</TD><TD ALIGN=\"LEFT\">%d</TD></TR>\n", i, i, ptr))
 	}
 	label.WriteString("</TABLE>")

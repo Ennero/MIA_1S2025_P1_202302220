@@ -135,7 +135,7 @@ func (sb *SuperBlock) PrintInodes(path string) error {
 	return nil
 }
 
-// Impriir bloques
+// Imprimir bloques
 func (sb *SuperBlock) PrintBlocks(path string) error {
 	// Imprimir bloques
 	fmt.Println("\nBloques\n----------------")
