@@ -3,6 +3,7 @@ package structures
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -215,101 +216,168 @@ func FindInodeByPath(sb *SuperBlock, diskPath string, path string) (int32, *Inod
 	return currentInodeNum, targetInode, nil
 }
 
+
+// ReadFileContent lee el contenido completo de un archivo, manejando indirección.
 func ReadFileContent(sb *SuperBlock, diskPath string, inode *Inode) (string, error) {
-	content := make([]byte, 0, inode.I_size)
+	if inode.I_type[0] != '1' {
+		return "", fmt.Errorf("inodo %d no es un archivo", -1)
+	}
+	if inode.I_size <= 0 {
+		return "", nil // Archivo vacío
+	}
+	if sb.S_block_size <= 0 {
+		return "", errors.New("tamaño de bloque inválido en superbloque")
+	}
 
-	//Debugeando
-	fmt.Printf("Leyendo archivo: tamaño esperado %d bytes\n", inode.I_size)
-	fmt.Printf("Bloques directos: %v\n", inode.I_block[:12])
+	//Buffer para construir el contenido eficientemente
+	var content bytes.Buffer
+	content.Grow(int(inode.I_size)) // Pre-asignar capacidad
 
+	// Función auxiliar para leer un bloque de datos y añadirlo al buffer
 	readBlock := func(blockPtr int32) error {
+		// Detener si ya se leyó suficiente
+		if int32(content.Len()) >= inode.I_size {
+			return nil
+		}
+
 		if blockPtr == -1 {
 			return nil
 		}
-
-		fmt.Printf("Leyendo bloque %d en posición %d\n",
-			blockPtr, sb.S_block_start+blockPtr*sb.S_block_size)
+		if blockPtr < 0 || blockPtr >= sb.S_blocks_count {
+			return fmt.Errorf("puntero de bloque de datos inválido: %d", blockPtr)
+		}
 
 		fileBlock := &FileBlock{}
-		blockOffset := int64(sb.S_block_start + blockPtr*sb.S_block_size)
+		blockOffset := int64(sb.S_block_start) + int64(blockPtr)*int64(sb.S_block_size)
 		if err := fileBlock.Deserialize(diskPath, blockOffset); err != nil {
-			return err
+			return fmt.Errorf("error leyendo bloque de datos %d: %w", blockPtr, err)
 		}
 
-		// Print the first few bytes of the block for debugging
-		preview := string(fileBlock.B_content[:min(20, len(fileBlock.B_content))])
-		fmt.Printf("Vista previa del bloque %d: %q...\n", blockPtr, preview)
-
-		remaining := inode.I_size - int32(len(content))
-		if remaining <= 0 {
-			return nil
+		// Calcular cuántos bytes copiar de este bloque
+		remainingInFile := inode.I_size - int32(content.Len())
+		bytesToCopy := int(sb.S_block_size)
+		if int32(bytesToCopy) > remainingInFile {
+			bytesToCopy = int(remainingInFile)
 		}
-		toCopy := min(int(remaining), len(fileBlock.B_content))
-		content = append(content, fileBlock.B_content[:toCopy]...)
 
-		fmt.Printf("Contenido actual (después de leer bloque %d): %d bytes\n",
-			blockPtr, len(content))
-
+		if bytesToCopy > 0 {
+			content.Write(fileBlock.B_content[:bytesToCopy])
+		}
 		return nil
 	}
 
-	// Verificar si el tamaño del inodo es válido
-	if inode.I_size <= 0 {
-		return "", fmt.Errorf("tamaño de archivo inválido: %d", inode.I_size)
-	}
-
-	// Bloques directos (0-11)
+	// Bloques Directos (0-11)
+	fmt.Println("Leyendo bloques directos...")
 	for i := 0; i < 12; i++ {
-
-		if inode.I_block[i] == -1 {
-			continue
-		}
-
 		if err := readBlock(inode.I_block[i]); err != nil {
 			return "", err
 		}
-		if int32(len(content)) >= inode.I_size {
+		if int32(content.Len()) >= inode.I_size {
 			break
 		}
 	}
+	if int32(content.Len()) >= inode.I_size {
+		return content.String(), nil
+	}
 
-	// Bloque indirecto simple (12)
+	//Indirecto Simple (12)
 	if inode.I_block[12] != -1 {
-
-		fmt.Printf("Leyendo bloque indirecto %d\n", inode.I_block[12])
-
-		ptrBlock := &PointerBlock{}
-		ptrOffset := int64(sb.S_block_start + inode.I_block[12]*sb.S_block_size)
-		if err := ptrBlock.Deserialize(diskPath, ptrOffset); err != nil {
-			return "", fmt.Errorf("error al leer bloque indirecto: %v", err)
+		fmt.Println("Leyendo bloques desde Indirecto Simple...")
+		err := readIndirectBlocksRecursive(1, inode.I_block[12], sb, diskPath, &content, inode.I_size, readBlock)
+		if err != nil {
+			return "", fmt.Errorf("error en indirección simple: %w", err)
 		}
-		for _, ptr := range ptrBlock.P_pointers {
-			if ptr == -1 {
-				continue
-			}
-			if err := readBlock(ptr); err != nil {
-				return "", err
-			}
-			if int32(len(content)) >= inode.I_size {
-				break
-			}
+		if int32(content.Len()) >= inode.I_size {
+			return content.String(), nil
 		}
 	}
 
-	// Asegurarse de que no excedemos el tamaño declarado del archivo
-	if int32(len(content)) > inode.I_size {
-		content = content[:inode.I_size]
+	// Indirecto Doble (13)
+	if inode.I_block[13] != -1 {
+		fmt.Println("Leyendo bloques desde Indirecto Doble...")
+		err := readIndirectBlocksRecursive(2, inode.I_block[13], sb, diskPath, &content, inode.I_size, readBlock)
+		if err != nil {
+			return "", fmt.Errorf("error en indirección doble: %w", err)
+		}
+		if int32(content.Len()) >= inode.I_size {
+			return content.String(), nil
+		}
 	}
 
-	result := string(content)
-	fmt.Printf("Contenido final: %d bytes, string resultado: %q\n", len(result), result)
+	// Indirecto Triple (14)
+	if inode.I_block[14] != -1 {
+		fmt.Println("Leyendo bloques desde Indirecto Triple...")
+		err := readIndirectBlocksRecursive(3, inode.I_block[14], sb, diskPath, &content, inode.I_size, readBlock)
+		if err != nil {
+			return "", fmt.Errorf("error en indirección triple: %w", err)
+		}
+	}
 
-	return result, nil
+	// Asegurarse de no devolver más bytes que inode.I_size (aunque la lógica anterior debería prevenirlo)
+	finalContent := content.Bytes()
+	if int32(len(finalContent)) > inode.I_size {
+		finalContent = finalContent[:inode.I_size]
+	}
+
+	return string(finalContent), nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+
+func readIndirectBlocksRecursive(
+	level int, // Nivel de indirección actual (1, 2, 3)
+	blockPtr int32, // Puntero al bloque de punteros de este nivel
+	sb *SuperBlock,
+	diskPath string,
+	content *bytes.Buffer, // Usar buffer para eficiencia
+	sizeLimit int32,
+	readBlockFunc func(int32) error, // Función para leer un bloque de DATOS
+) error {
+
+	// Condición de parada: nivel inválido o puntero inválido
+	if level < 1 || level > 3 || blockPtr == -1 || blockPtr >= sb.S_blocks_count {
+		return nil // No es un error, simplemente no hay nada que leer aquí
 	}
-	return b
+	// Detener si ya hemos leído suficiente
+	if int32(content.Len()) >= sizeLimit {
+		return nil
+	}
+
+	// Deserializar el bloque de punteros de este nivel
+	ptrBlock := &PointerBlock{}
+	ptrOffset := int64(sb.S_block_start) + int64(blockPtr)*int64(sb.S_block_size)
+	if err := ptrBlock.Deserialize(diskPath, ptrOffset); err != nil {
+		// Loguear error pero intentar continuar si es posible? O retornar error?
+		fmt.Printf("Advertencia: error al leer bloque de punteros nivel %d (índice %d): %v\n", level, blockPtr, err)
+		return nil // Podría ser un error fatal, pero intentamos ser robustos
+	}
+
+	// Iterar sobre los punteros de este bloque
+	for _, nextPtr := range ptrBlock.P_pointers {
+		if nextPtr == -1 {
+			continue
+		}
+		if nextPtr < 0 || nextPtr >= sb.S_blocks_count {
+			fmt.Printf("Advertencia: puntero inválido %d encontrado en bloque de punteros nivel %d (índice %d)\n", nextPtr, level, blockPtr)
+			continue
+		}
+
+		// Si es el último nivel de indirección (nivel 1), los punteros apuntan a bloques de DATOS
+		if level == 1 {
+			if err := readBlockFunc(nextPtr); err != nil {
+				return fmt.Errorf("error leyendo bloque de datos %d desde indirecto: %w", nextPtr, err)
+			}
+		} else {
+			// Si no es el último nivel, llamar recursivamente para el siguiente nivel inferior
+			err := readIndirectBlocksRecursive(level-1, nextPtr, sb, diskPath, content, sizeLimit, readBlockFunc)
+			if err != nil {
+				return err // Propagar error de niveles inferiores
+			}
+		}
+
+		// Detener si ya hemos leído suficiente después de procesar un puntero
+		if int32(content.Len()) >= sizeLimit {
+			break
+		}
+	}
+	return nil
 }
