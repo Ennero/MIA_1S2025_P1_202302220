@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// Crear users.txt en nuestro sistema de archivos
-// En structures/ext2_logic.go
 
 // Crear users.txt en nuestro sistema de archivos
 func (sb *SuperBlock) CreateUsersFile(path string) error {
@@ -80,7 +78,7 @@ func (sb *SuperBlock) CreateUsersFile(path string) error {
 	sb.S_first_blo += sb.S_block_size
 
 	// ----------- Creamos /users.txt ---------------------------------------------------------------------------------------------------------------
-	usersText := "1,G,root\n1,U,root,123\n"
+	usersText := "1,G,root\n1,U,root,root,123\n"
 
 	// Calcular índices para users.txt ANTES de modificar S_first_*
 	usersInodeIndex := (sb.S_first_ino - sb.S_inode_start) / sb.S_inode_size
