@@ -111,7 +111,6 @@ func contains(list []string, value string) bool {
 	return slices.Contains(list, value)
 }
 
-// Ejemplo de función commandRep (debe ser implementada)
 func commandRep(rep *REP) error {
 	// Obtener la partición montada
 	mountedMbr, mountedSb, mountedDiskPath, err := stores.GetMountedPartitionRep(rep.id)
