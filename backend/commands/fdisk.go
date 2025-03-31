@@ -7,6 +7,7 @@ import (
 	"errors" // Paquete para manejar errores y crear nuevos errores con mensajes personalizados
 	"fmt"    // Paquete para formatear cadenas y realizar operaciones de entrada/salida
 	"os"
+	"path/filepath"
 	"regexp"  // Paquete para trabajar con expresiones regulares, útil para encontrar y manipular patrones en cadenas
 	"strconv" // Paquete para convertir cadenas a otros tipos de datos, como enteros
 	"strings" // Paquete para manipular cadenas, como unir, dividir, y modificar contenido de cadenas
@@ -22,122 +23,161 @@ type FDISK struct {
 	name string // Nombre de la partición
 }
 
-/*
-	fdisk -size=1 -type=L -unit=M -fit=BF -name="Particion3" -path="/home/keviin/University/PRACTICAS/MIA_LAB_S2_2024/CLASEEXTRA/disks/Disco1.mia"
-	fdisk -size=300 -path=/home/Disco1.mia -name=Particion1
-	fdisk -type=E -path=/home/Disco2.mia -Unit=K -name=Particion2 -size=300
-*/
-
-// CommandFdisk parsea el comando fdisk y devuelve una instancia de FDISK
+// ParseFdisk parsea el comando fdisk
 func ParseFdisk(tokens []string) (string, error) {
-	cmd := &FDISK{} // Crea una nueva instancia de FDISK
+	cmd := &FDISK{} 
 
-	// Unir tokens en una sola cadena y luego dividir por espacios, respetando las comillas
 	args := strings.Join(tokens, " ")
-	// Expresión regular para encontrar los parámetros del comando fdisk
-	re := regexp.MustCompile(`-size=\d+|-unit=[kKmM]|-fit=[bBfF]{2}|-path="[^"]+"|-path=[^\s]+|-type=[pPeElL]|-name="[^"]+"|-name=[^\s]+`)
-	// Encuentra todas las coincidencias de la expresión regular en la cadena de argumentos
-	matches := re.FindAllString(args, -1)
 
-	// Itera sobre cada coincidencia encontrada
-	for _, match := range matches {
-		// Divide cada parte en clave y valor usando "=" como delimitador
-		kv := strings.SplitN(match, "=", 2)
-		if len(kv) != 2 {
-			return "", fmt.Errorf("formato de parámetro inválido: %s", match)
+	re := regexp.MustCompile(`-size=(\d+)|-unit=([kKmMbB])|-fit=([bBfFwW]{2})|-path="([^"]+)"|-path=([^\s]+)|-type=([pPeElL])|-name="([^"]+)"|-name=([^\s]+)`)
+
+
+	allMatches := re.FindAllStringSubmatch(args, -1)
+
+	params := make(map[string]string)
+
+	for _, match := range allMatches {
+		if match[1] != "" { // -size
+			params["-size"] = match[1]
+		} else if match[2] != "" {
+			params["-unit"] = match[2]
+		} else if match[3] != "" { 
+			params["-fit"] = match[3]
+		} else if match[4] != "" {
+			params["-path"] = match[4]
+		} else if match[5] != "" { 
+			params["-path"] = match[5]
+		} else if match[6] != "" { 
+			params["-type"] = match[6]
+		} else if match[7] != "" {
+			params["-name"] = match[7]
+		} else if match[8] != "" {
+			params["-name"] = match[8]
 		}
-		key, value := strings.ToLower(kv[0]), kv[1]
+	}
+	// Procesar los parámetros almacenados
+	for key, value := range params {
+		cleanKey := strings.ToLower(key)
 
-		// Remove quotes from value if present
-		if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
-			value = strings.Trim(value, "\"")
-		}
 
-		// Switch para manejar diferentes parámetros
-		switch key {
+		switch cleanKey {
 		case "-size":
-			// Convierte el valor del tamaño a un entero
 			size, err := strconv.Atoi(value)
 			if err != nil || size <= 0 {
-				return "", errors.New("el tamaño debe ser un número entero positivo")
+				return "", fmt.Errorf("valor inválido para -size: '%s'. Debe ser un número entero positivo", value)
 			}
 			cmd.size = size
 		case "-unit":
-			// Verifica que la unidad sea "K" o "M"
-			if value != "K" && value != "M" {
-				return "", errors.New("la unidad debe ser K o M")
+			unitUpper := strings.ToUpper(value)
+			// Verifica que la unidad sea "K", "M" o "B"
+			if unitUpper != "K" && unitUpper != "M" && unitUpper != "B" {
+				return "", fmt.Errorf("valor inválido para -unit: '%s'. La unidad debe ser K, M o B", value)
 			}
-			cmd.unit = strings.ToUpper(value)
+			cmd.unit = unitUpper // Almacena la unidad en mayúsculas
 		case "-fit":
-			// Verifica que el ajuste sea "BF", "FF" o "WF"
-			value = strings.ToUpper(value)
-			if value != "BF" && value != "FF" && value != "WF" {
-				return "", errors.New("el ajuste debe ser BF, FF o WF")
+			fitUpper := strings.ToUpper(value)
+			if fitUpper != "BF" && fitUpper != "FF" && fitUpper != "WF" {
+				return "", fmt.Errorf("valor inválido para -fit: '%s'. El ajuste debe ser BF, FF o WF", value)
 			}
-			cmd.fit = value
+			cmd.fit = fitUpper
 		case "-path":
-			// Verifica que el path no esté vacío
 			if value == "" {
-				return "", errors.New("el path no puede estar vacío")
+				return "", errors.New("el valor para -path no puede estar vacío") // Aunque regex debería prevenir esto
 			}
 			cmd.path = value
 		case "-type":
-			// Verifica que el tipo sea "P", "E" o "L"
-			value = strings.ToUpper(value)
-			if value != "P" && value != "E" && value != "L" {
-				return "", errors.New("el tipo debe ser P, E o L")
+			typeUpper := strings.ToUpper(value)
+			if typeUpper != "P" && typeUpper != "E" && typeUpper != "L" {
+				return "", fmt.Errorf("valor inválido para -type: '%s'. El tipo debe ser P, E o L", value)
 			}
-			cmd.typ = value
+			cmd.typ = typeUpper
 		case "-name":
-			// Verifica que el nombre no esté vacío
 			if value == "" {
-				return "", errors.New("el nombre no puede estar vacío")
+				return "", errors.New("el valor para -name no puede estar vacío") // Aunque regex debería prevenir esto
 			}
 			cmd.name = value
 		default:
-			// Si el parámetro no es reconocido, devuelve un error
-			return "", fmt.Errorf("parámetro desconocido: %s", key)
+			return "", fmt.Errorf("lógica de procesamiento faltante para parámetro: %s", key)
 		}
 	}
 
-	// Verifica que los parámetros -size, -path y -name hayan sido proporcionados
 	if cmd.size == 0 {
-		return "", errors.New("faltan parámetros requeridos: -size")
+		return "", errors.New("parámetro requerido faltante o inválido: -size")
 	}
 	if cmd.path == "" {
-		return "", errors.New("faltan parámetros requeridos: -path")
+		return "", errors.New("parámetro requerido faltante: -path")
 	}
 	if cmd.name == "" {
-		return "", errors.New("faltan parámetros requeridos: -name")
+		return "", errors.New("parámetro requerido faltante: -name")
 	}
 
-	// Si no se proporcionó la unidad, se establece por defecto a "M"
+	// --- Establecer valores por defecto ---
 	if cmd.unit == "" {
 		cmd.unit = "M"
 	}
-
-	// Si no se proporcionó el ajuste, se establece por defecto a "FF"
 	if cmd.fit == "" {
-		cmd.fit = "FF"
+		cmd.fit = "FF" 
 	}
-
-	// Si no se proporcionó el tipo, se establece por defecto a "P"
 	if cmd.typ == "" {
 		cmd.typ = "P"
 	}
 
-	// Crear la partición con los parámetros proporcionados
-	err := commandFdisk(cmd)
+	fmt.Println("Parámetros parseados:", cmd) 
+
+	fmt.Println("Tamaño numérico ingresado:", cmd.size)
+	fmt.Println("Unidad ingresada/default:", cmd.unit)
+
+	filepath := filepath.Clean(cmd.path)
+
+	var diskSize int64
+	fileInfo, err := os.Stat(filepath)
 	if err != nil {
-		fmt.Println("Error:", err)
-		return "", err
+		if os.IsNotExist(err) {
+			fmt.Println("Advertencia: El archivo del disco no existe, simulando tamaño de 100MB para validación.")
+			return "", fmt.Errorf("no existe el disco")
+		} else {
+			fmt.Println("Error al obtener la información del disco:", err)
+			return "", fmt.Errorf("no se pudo acceder a la información del disco en '%s': %w", filepath, err)
+		}
+	} else {
+		diskSize = fileInfo.Size()
 	}
 
-	// Devuelve un mensaje de éxito con los detalles de la partición creada
+	var partSizeInBytes int64
+	if cmd.unit == "B" {
+		// Si la unidad es Bytes, el tamaño ya está en bytes
+		partSizeInBytes = int64(cmd.size)
+	} else {
+		// Si es K o M, convertir a bytes usando la función utilitaria
+		sizeBytes, errConv := utils.ConvertToBytes(cmd.size, cmd.unit)
+		if errConv != nil {
+			fmt.Println("Error inesperado convirtiendo tamaño:", errConv)
+			return "", errConv
+		}
+		partSizeInBytes = int64(sizeBytes)
+	}
+
+	fmt.Println("Tamaño de la partición calculado (bytes):", partSizeInBytes)
+	fmt.Println("Tamaño total del disco (bytes):", diskSize)
+
+	if partSizeInBytes > diskSize {
+		return "", fmt.Errorf("el tamaño de la partición (%d bytes) no puede ser mayor que el tamaño del disco (%d bytes)", partSizeInBytes, diskSize)
+	}
+	if partSizeInBytes <= 0 {
+		return "", fmt.Errorf("el tamaño calculado de la partición debe ser mayor que cero (%d bytes)", partSizeInBytes)
+	}
+
+	// Crear la partición con los parámetros proporcionados
+	err = commandFdisk(cmd)
+	if err != nil {
+		fmt.Println("Error durante la ejecución de fdisk:", err)
+		return "", fmt.Errorf("falló la creación de la partición: %w", err)
+	}
+
 	return fmt.Sprintf("FDISK: Partición creada exitosamente\n"+
 		"-> Path: %s\n"+
 		"-> Nombre: %s\n"+
-		"-> Tamaño: %d%s\n"+
+		"-> Tamaño: %d%s\n"+ 
 		"-> Tipo: %s\n"+
 		"-> Fit: %s",
 		cmd.path, cmd.name, cmd.size, cmd.unit, cmd.typ, cmd.fit), nil
