@@ -2,84 +2,74 @@ package analyzer
 
 import (
 	commands "backend/commands"
-	"errors"  // Importa el paquete "errors" para manejar errores
-	"fmt"     // Importa el paquete "fmt" para formatear e imprimir texto
-	"strings" // Importa el paquete "strings" para manipulación de cadenas
+	"fmt"    
+	"strings" 
 )
 
-// Analyzer analiza el comando de entrada y ejecuta la acción correspondiente
 func Analyzer(input string) (string, error) {
-	// Divide la entrada en tokens usando espacios en blanco como delimitadores
-	tokens := strings.Fields(input)
 
-	// Si no se proporcionó ningún comando, devuelve un error
-	if len(tokens) == 0 {
-		return "", errors.New("no se proporcionó ningún comando")
+	trimmedInput := strings.TrimSpace(input)
+
+	//Ignorar líneas vacías o que son solo comentarios
+	if trimmedInput == "" {
+		// Línea vacía o solo espacios en blanco, no hacer nada, no es un error.
+		return "", nil
+	}
+	if strings.HasPrefix(trimmedInput, "#") {
+        fmt.Printf("Comentario ignorado: %s\n", trimmedInput)
+		return "", nil
 	}
 
-	//Transforma el primer token a minúsculas
-	tokens[0] = strings.ToLower(tokens[0])
+	//Dividir la línea en tokens
+	tokens := strings.Fields(trimmedInput)
 
-	// Switch para manejar diferentes comandos
-	switch tokens[0] {
+	if len(tokens) == 0 {
+		return "", nil 
+	}
+
+	// Procesar el comando 
+	command := strings.ToLower(tokens[0]) // Convertir comando a minúsculas
+	arguments := tokens[1:]  
+
+	// Switch para manejar comandos conocidos
+	switch command {
 	case "mkdisk":
-		// Llama a la función ParseMkdisk del paquete commands con los argumentos restantes
-		return commands.ParseMkdisk(tokens[1:])
+		return commands.ParseMkdisk(arguments)
 	case "fdisk":
-		// Llama a la función CommandFdisk del paquete commands con los argumentos restantes
-		return commands.ParseFdisk(tokens[1:])
+		return commands.ParseFdisk(arguments)
 	case "mount":
-		// Llama a la función CommandMount del paquete commands con los argumentos restantes
-		return commands.ParseMount(tokens[1:])
+		return commands.ParseMount(arguments)
 	case "mkfs":
-		// Llama a la función CommandMkfs del paquete commands con los argumentos restantes
-		return commands.ParseMkfs(tokens[1:])
+		return commands.ParseMkfs(arguments)
 	case "rep":
-		// Llama a la función CommandRep del paquete commands con los argumentos restantes
-		return commands.ParseRep(tokens[1:])
+		return commands.ParseRep(arguments)
 	case "mkdir":
-		// Llama a la función CommandMkdir del paquete commands con los argumentos restantes
-		return commands.ParseMkdir(tokens[1:])
+		return commands.ParseMkdir(arguments)
 	case "rmdisk":
-		// Llama a la función CommandRmdisk del paquete commands con los argumentos restantes
-		return commands.ParseRmdisk(tokens[1:])
+		return commands.ParseRmdisk(arguments)
 	case "mounted":
-		// Llama la función CommandMounted del paquete commands con los argumentos restantes
-		return commands.ParseMounted(tokens[1:])
+		return commands.ParseMounted(arguments)
 	case "cat":
-		// Llama la función CommandCat del paquete commands con los argumentos restantes
-		return commands.ParseCat(tokens[1:])
+		return commands.ParseCat(arguments)
 	case "login":
-		// Llama a la función ParseLogin del paquete commands con los argumentos restantes
-		return commands.ParseLogin(tokens[1:])
+		return commands.ParseLogin(arguments)
 	case "logout":
-		// Llama a la función ParseLogout del paquete commands con los argumentos restantes
-		return commands.ParseLogout(tokens[1:])
+		return commands.ParseLogout(arguments)
 	case "mkfile":
-		// Llama a la función ParseMkfile del paquete commands con los argumentos restantes
-		return commands.ParseMkfile(tokens[1:])
+		return commands.ParseMkfile(arguments)
 	case "mkgrp":
-		// Llama a la función ParseMkgrp del paquete commands con los argumentos restantes
-		return commands.ParseMkgrp(tokens[1:])
+		return commands.ParseMkgrp(arguments)
 	case "rmgrp":
-		// Llama a la función ParseRmgrp del paquete commands con los argumentos restantes
-		return commands.ParseRmgrp(tokens[1:])
+		return commands.ParseRmgrp(arguments)
 	case "mkusr":
-		// Llama a la función ParseMkusr del paquete commands con los argumentos restantes
-		return commands.ParseMkusr(tokens[1:])
+		return commands.ParseMkusr(arguments)
 	case "rmusr":
-		// Llama a la función ParseRmusr del paquete commands con los argumentos restantes
-		return commands.ParseRmusr(tokens[1:])
-		case "chgrp":
-		// Llama a la función ParseChgrp del paquete commands con los argumentos restantes
-		return commands.ParseChgrp(tokens[1:])
+		return commands.ParseRmusr(arguments)
+	case "chgrp":
+		return commands.ParseChgrp(arguments)
 
 	default:
-		if tokens[0][0] == '#' {
-			// Si el primer carácter del comando es '#', se considera un comentario
-			return "", nil
-		}
-		// Si el comando no es reconocido, devuelve un error
-		return "", fmt.Errorf("comando desconocido: %s", tokens[0])
+
+		return "", fmt.Errorf("comando desconocido: %s", command)
 	}
 }

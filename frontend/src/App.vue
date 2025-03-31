@@ -5,7 +5,6 @@
         <!-- Cabecera -->
         <div class="text-center mb-4">
           <h1 class="display-5 fw-bold text-primary">Sistema de archivos EXT2</h1>
-          <p class="lead text-secondary">Gestión de comandos y scripts</p>
           <hr class="my-4 text-primary opacity-75">
         </div>
         
@@ -108,60 +107,103 @@ export default {
     handleFileUpload(event) {
       const file = event.target.files[0];
       this.fileError = "";
-      
+
       if (!file) return;
-      
-      // Verificar si la extensión del archivo es .mias
+
       const fileName = file.name;
       const fileExtension = fileName.split('.').pop().toLowerCase();
-      
+
       if (fileExtension !== 'mias') {
         this.fileError = "Solo se permiten archivos con extensión .mias";
-        // Limpiar la selección del input file
         event.target.value = '';
         return;
       }
-      
-      // Si pasa la validación, proceder con la carga
+
       const reader = new FileReader();
       reader.onload = (e) => {
         this.entrada = e.target.result;
-        this.salida = `✅ Archivo cargado: ${fileName}`;
+        this.salida = `✅ Archivo cargado: ${fileName}\n--- Contenido ---\n${this.entrada}\n---------------\nListo para ejecutar.`; // Mostrar contenido cargado
       };
       reader.readAsText(file);
     },
-    async ejecutar() {
-      if(!this.entrada.trim()) {
+    async ejecutar() { // Marcar la función como async
+      if (!this.entrada.trim()) {
         this.salida = "⚠️ No hay comandos para ejecutar";
         return;
       }
-      
-      this.salida = "🔄 Ejecutando comandos...\n";
 
-      try {
-        const response = await fetch('http://localhost:3001/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({command: this.entrada}),
-        });
-        
-        if(!response.ok) {
-          throw new Error('Error al ejecutar el comando');
+      // Limpiar salida anterior e indicar inicio
+      this.salida = "🔄 Ejecutando comandos...\n------------------------\n";
+
+      // Dividir la entrada en líneas
+      const lines = this.entrada.split('\n');
+      let hasErrors = false; // Para rastrear si hubo algún error
+
+      // Iterar sobre cada línea
+      for (const line of lines) {
+        const trimmedLine = line.trim(); // Quitar espacios inicio/fin
+
+        // Ignorar líneas vacías y comentarios en el frontend también
+        if (trimmedLine === "" || trimmedLine.startsWith("#")) {
+          // Opcional: Mostrar línea ignorada en la salida
+          // this.salida += `(Ignorando: ${line})\n`;
+          continue; // Pasar a la siguiente línea
         }
 
-        const data = await response.json();
-        this.salida += data.output;
-      } catch (error) {
-        this.salida += "❌ Error al ejecutar el comando.\n";
-      }
+        // Mostrar el comando que se va a ejecutar
+        this.salida += `> ${trimmedLine}\n`;
+
+        try {
+          const response = await fetch('http://localhost:3001/', { // Usar await para esperar la respuesta
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            // Enviar solo la línea actual como comando
+            body: JSON.stringify({ command: trimmedLine }),
+          });
+
+          // Leer la respuesta del backend
+          const data = await response.json(); // Usar await
+
+          // Verificar si el backend reportó un error en su estructura JSON
+          if (data.error) {
+              this.salida += `❌ Error: ${data.error}\n`;
+              hasErrors = true;
+          } else if (!response.ok) {
+              let errorMsg = `Error HTTP ${response.status}`;
+             if(data.output) { // Si hay 'output' aunque no sea OK, podría tener el error
+                errorMsg += `: ${data.output}`;
+             } else if(data.error) { // O si hay campo 'error'
+                errorMsg += `: ${data.error}`;
+              }
+              this.salida += `❌ ${errorMsg}\n`;
+              hasErrors = true;
+          } else {
+            if (data.output && data.output.trim() !== "") {
+                this.salida += `${data.output}\n`;
+            } else {
+                 // Si no hay output, al menos indicar que se completó ok (opcional)
+                this.salida += `(OK)\n`;
+            }
+          }
+        } catch (error) {
+           // Error de red o al parsear JSON
+          console.error("Error en fetch:", error);
+          this.salida += `❌ Error de conexión o respuesta inválida del backend.\n`;
+          hasErrors = true;
+        }
+        this.salida += "------------------------\n";
+      } 
+
+      this.salida += hasErrors ? "⚠️ Ejecución completada con errores." : "✅ Ejecución completada.";
+
     },
     limpiar() {
+       // ... (tu código de limpiar sin cambios)
       this.entrada = "";
       this.salida = "";
       this.fileError = "";
-      // Limpiar también el input de archivo
       const fileInput = document.getElementById('fileInput');
       if (fileInput) fileInput.value = '';
     },

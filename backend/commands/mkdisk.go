@@ -30,88 +30,98 @@ type MKDISK struct {
 */
 
 func ParseMkdisk(tokens []string) (string, error) {
-	cmd := &MKDISK{} // Crea una nueva instancia de MKDISK
+	cmd := &MKDISK{}
+	foundParams := make(map[string]bool)
 
-	// Unir tokens en una sola cadena y luego dividir por espacios, respetando las comillas
-	args := strings.Join(tokens, " ")
-	// Expresión regular para encontrar los parámetros del comando mkdisk
+	originalInput := strings.Join(tokens, " ")
+	args := originalInput               
+
 	re := regexp.MustCompile(`-size=\d+|-unit=[kKmM]|-fit=[bBfFwW]{2}|-path="[^"]+"|-path=[^\s]+`)
-	// Encuentra todas las coincidencias de la expresión regular en la cadena de argumentos
 	matches := re.FindAllString(args, -1)
 
-	// Itera sobre cada coincidencia encontrada
+	tempArgs := args 
+
 	for _, match := range matches {
-		// Divide cada parte en clave y valor usando "=" como delimitador
 		kv := strings.SplitN(match, "=", 2)
 		if len(kv) != 2 {
-			return "", fmt.Errorf("formato de parámetro inválido: %s", match)
+			return "", fmt.Errorf("error interno al parsear formato clave=valor: '%s'", match)
 		}
 		key, value := strings.ToLower(kv[0]), kv[1]
 
-		// Remove quotes from value if present
+		// Verificar duplicados ANTES de procesar
+		if foundParams[key] {
+			return "", fmt.Errorf("parámetro '%s' especificado más de una vez", key)
+		}
+
 		if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
 			value = strings.Trim(value, "\"")
 		}
 
-		// Switch para manejar diferentes parámetros
+		// Asignar valores y marcar como encontrado
 		switch key {
 		case "-size":
-			// Convierte el valor del tamaño a un entero
 			size, err := strconv.Atoi(value)
 			if err != nil || size <= 0 {
-				return "", errors.New("el tamaño debe ser un número entero positivo")
+				return "a", errors.New("el tamaño (-size) debe ser un número entero positivo")
 			}
 			cmd.size = size
+			foundParams[key] = true
 		case "-unit":
-			// Verifica que la unidad sea "K" o "M"
-			if value != "K" && value != "M" {
-				return "", errors.New("la unidad debe ser K o M")
+			unitVal := strings.ToUpper(value) 
+			if unitVal != "K" && unitVal != "M" {
+				return "a", errors.New("la unidad (-unit) debe ser K o M")
 			}
-			cmd.unit = strings.ToUpper(value)
+			cmd.unit = unitVal
+			foundParams[key] = true
 		case "-fit":
-			// Verifica que el ajuste sea "BF", "FF" o "WF"
-			value = strings.ToUpper(value)
-			if value != "BF" && value != "FF" && value != "WF" {
-				return "", errors.New("el ajuste debe ser BF, FF o WF")
+			fitVal := strings.ToUpper(value)
+			if fitVal != "BF" && fitVal != "FF" && fitVal != "WF" {
+				return "a", errors.New("el ajuste (-fit) debe ser BF, FF o WF")
 			}
-			cmd.fit = value
+			cmd.fit = fitVal
+			foundParams[key] = true
 		case "-path":
-			// Verifica que el path no esté vacío
 			if value == "" {
-				return "", errors.New("el path no puede estar vacío")
+				return "a", errors.New("el path (-path) no puede estar vacío")
 			}
 			cmd.path = value
+			foundParams[key] = true
 		default:
-			// Si el parámetro no es reconocido, devuelve un error
-			return "", fmt.Errorf("parámetro desconocido: %s", key)
+			return "a", fmt.Errorf("clave de parámetro desconocida encontrada: %s", key)
 		}
+
+		tempArgs = strings.Replace(tempArgs, match, "", 1)
+
 	}
 
-	// Verifica que los parámetros -size y -path hayan sido proporcionados
-	if cmd.size == 0 {
-		return "", errors.New("faltan parámetros requeridos: -size")
-	}
-	if cmd.path == "" {
-		return "", errors.New("faltan parámetros requeridos: -path")
+	remainingInput := strings.TrimSpace(tempArgs)
+	if remainingInput != "" {
+		firstUnknown := remainingInput
+		if spaceIndex := strings.Index(firstUnknown, " "); spaceIndex != -1 {
+			firstUnknown = firstUnknown[:spaceIndex]
+		}
+		return "a", fmt.Errorf("parámetro o texto no reconocido cerca de: '%s'", firstUnknown)
 	}
 
-	// Si no se proporcionó la unidad, se establece por defecto a "M"
-	if cmd.unit == "" {
+	if !foundParams["-size"] {
+		return "a", errors.New("falta parámetro requerido: -size")
+	}
+	if !foundParams["-path"] {
+		return "a", errors.New("falta parámetro requerido: -path")
+	}
+
+	if !foundParams["-unit"] {
 		cmd.unit = "M"
 	}
-
-	// Si no se proporcionó el ajuste, se establece por defecto a "FF"
-	if cmd.fit == "" {
+	if !foundParams["-fit"] {
 		cmd.fit = "FF"
 	}
 
-	// Crear el disco con los parámetros proporcionados
 	err := commandMkdisk(cmd)
 	if err != nil {
-		fmt.Println("Error:", err)
+		return "", fmt.Errorf("error al ejecutar mkdisk: %w", err)
 	}
 
-		// Devuelve un mensaje de éxito con los detalles del disco creado
 	return fmt.Sprintf("MKDISK: Disco creado exitosamente\n"+
 		"-> Path: %s\n"+
 		"-> Tamaño: %d%s\n"+
