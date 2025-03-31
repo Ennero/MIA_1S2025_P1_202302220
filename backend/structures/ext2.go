@@ -3,6 +3,7 @@ package structures
 import (
 	utils "backend/utils"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -234,8 +235,8 @@ func (sb *SuperBlock) createFolderInInode(path string, inodeIndex int32, parents
 				I_ctime: float32(time.Now().Unix()),
 				I_mtime: float32(time.Now().Unix()),
 				I_block: [15]int32{newFolderBlockIndex, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, // Apunta al bloque calculado
-				I_type:  [1]byte{'0'},                                                                            // Tipo Directorio
-				I_perm:  [3]byte{'7', '7', '5'},                                                                  // Permisos (ej: rwxrwxr-x) TODO: Usar umask o permisos del padre?
+				I_type:  [1]byte{'0'},                                                                           // Tipo Directorio
+				I_perm:  [3]byte{'7', '7', '5'},                                                                 // Permisos (ej: rwxrwxr-x) TODO: Usar umask o permisos del padre?
 			}
 			err = folderInode.Serialize(path, int64(sb.S_first_ino))
 			if err != nil {
@@ -245,7 +246,9 @@ func (sb *SuperBlock) createFolderInInode(path string, inodeIndex int32, parents
 
 			// Actualizar bitmap de inodos y Superbloque (parte inodo)
 			err = sb.UpdateBitmapInode(path, newFolderInodeIndex)
-			if err != nil { return fmt.Errorf("error actualizando bitmap para inodo %d ('%s'): %w", newFolderInodeIndex, destDir, err) }
+			if err != nil {
+				return fmt.Errorf("error actualizando bitmap para inodo %d ('%s'): %w", newFolderInodeIndex, destDir, err)
+			}
 			sb.S_free_inodes_count--
 			sb.S_first_ino += sb.S_inode_size
 
@@ -266,7 +269,9 @@ func (sb *SuperBlock) createFolderInInode(path string, inodeIndex int32, parents
 
 			// Actualizar bitmap de bloques y Superbloque (parte bloque)
 			err = sb.UpdateBitmapBlock(path, newFolderBlockIndex)
-			if err != nil { return fmt.Errorf("error actualizando bitmap para bloque %d ('%s'): %w", newFolderBlockIndex, destDir, err) }
+			if err != nil {
+				return fmt.Errorf("error actualizando bitmap para bloque %d ('%s'): %w", newFolderBlockIndex, destDir, err)
+			}
 			sb.S_free_blocks_count--
 			sb.S_first_blo += sb.S_block_size
 
@@ -280,4 +285,109 @@ func (sb *SuperBlock) createFolderInInode(path string, inodeIndex int32, parents
 	} else {
 		return fmt.Errorf("no se encontró espacio en los bloques existentes del directorio padre (inodo %d) para crear '%s'", inodeIndex, destDir)
 	}
+}
+
+// COSITAS PARA LOS GRUPOS
+
+// Actualiza el bitmap de bloques y el contador de bloques libres
+func FreeInodeBlocks(inode *Inode, sb *SuperBlock, partitionPath string) error {
+	fmt.Printf("Liberando bloques para inodo con tamaño %d...\n", inode.I_size)
+	if inode.I_size == 0 { // Si el tamaño es 0
+		// Podemos verificar I_block por si acaso, pero es probable que estén en -1
+		fmt.Println("Tamaño de inodo es 0, no se liberan bloques.")
+
+		for i := range inode.I_block {
+			inode.I_block[i] = -1
+		}
+		return nil
+	}
+
+	// Liberar bloques directos
+	for i := 0; i < 12; i++ {
+		if err := freeDataBlockIfValid(inode.I_block[i], sb, partitionPath); err != nil {
+			fmt.Printf("Error liberando bloque directo %d: %v\n", inode.I_block[i], err)
+		}
+		inode.I_block[i] = -1 // Marcar como libre
+	}
+	// Liberar bloques simples
+	if err := freeIndirectBlocksRecursive(1, inode.I_block[12], sb, partitionPath); err != nil {
+		fmt.Printf("Error liberando indirección simple (nivel 1 desde %d): %v\n", inode.I_block[12], err)
+	}
+	inode.I_block[12] = -1
+
+	// Liberar bloques dobles
+	if err := freeIndirectBlocksRecursive(2, inode.I_block[13], sb, partitionPath); err != nil {
+		fmt.Printf("Error liberando indirección doble (nivel 2 desde %d): %v\n", inode.I_block[13], err)
+	}
+	inode.I_block[13] = -1
+
+	// Liberar bloques triples
+	if err := freeIndirectBlocksRecursive(3, inode.I_block[14], sb, partitionPath); err != nil {
+		fmt.Printf("Error liberando indirección triple (nivel 3 desde %d): %v\n", inode.I_block[14], err)
+	}
+	inode.I_block[14] = -1
+
+	return nil
+}
+
+// Libera los bloques de datos/punteros inferiores y LUEGO el bloque de punteros actual
+func freeIndirectBlocksRecursive(level int, blockPtr int32, sb *SuperBlock, partitionPath string) error {
+	if level < 1 || level > 3 || blockPtr == -1 || blockPtr >= sb.S_blocks_count {
+		return nil
+	}
+
+	// Deserializar el bloque de punteros de este nivel
+	ptrBlock := &PointerBlock{}
+	ptrOffset := int64(sb.S_block_start) + int64(blockPtr)*int64(sb.S_block_size)
+	if err := ptrBlock.Deserialize(partitionPath, ptrOffset); err != nil {
+		fmt.Printf("Advertencia: no se pudo leer bloque de punteros Nivel %d (%d): %v. Intentando liberar bloque %d de todas formas.\n", level, blockPtr, err, blockPtr)
+		return freeDataBlockIfValid(blockPtr, sb, partitionPath) // Intentar liberar el ptrBlock mismo
+	}
+
+	for _, nextPtr := range ptrBlock.P_pointers {
+		var errRec error
+		if level == 1 { 
+			errRec = freeDataBlockIfValid(nextPtr, sb, partitionPath)
+		} else { // Niveles superiores, nextPtr apunta a OTRO bloque de punteros
+			errRec = freeIndirectBlocksRecursive(level-1, nextPtr, sb, partitionPath)
+		}
+		if errRec != nil {
+			// Loguear pero continuar para intentar liberar el resto
+			fmt.Printf("Error durante liberación recursiva (nivel %d->%d, desde %d a %d): %v\n", level, level-1, blockPtr, nextPtr, errRec)
+		}
+	}
+
+	// Después de liberar/procesar todos los punteros internos, liberar el bloque de punteros actual
+	fmt.Printf("Liberando bloque de punteros Nivel %d (índice %d)\n", level, blockPtr)
+	return freeDataBlockIfValid(blockPtr, sb, partitionPath)
+}
+
+func freeDataBlockIfValid(blockIndex int32, sb *SuperBlock, partitionPath string) error {
+	if blockIndex == -1 || blockIndex < 0 || blockIndex >= sb.S_blocks_count {
+		return nil // Índice inválido o no usado, nada que hacer
+	}
+
+	// Actualizar bitmap
+	bitmapOffset := int64(sb.S_bm_block_start) + int64(blockIndex)
+	file, err := os.OpenFile(partitionPath, os.O_WRONLY, 0644) // Solo escritura
+	if err != nil {
+		return fmt.Errorf("error abriendo disco para liberar bloque %d: %w", blockIndex, err)
+	}
+	defer file.Close()
+
+	_, err = file.Seek(bitmapOffset, 0)
+	if err != nil {
+		return fmt.Errorf("error buscando bitmap para liberar bloque %d: %w", blockIndex, err)
+	}
+
+	_, err = file.Write([]byte{'0'}) // Marcar como libre
+	if err != nil {
+		return fmt.Errorf("error escribiendo en bitmap para liberar bloque %d: %w", blockIndex, err)
+	}
+
+	// Actualizar contador de libres en Superbloque (EN MEMORIA)
+	sb.S_free_blocks_count++
+
+	fmt.Printf("Bloque %d marcado como libre.\n", blockIndex)
+	return nil
 }

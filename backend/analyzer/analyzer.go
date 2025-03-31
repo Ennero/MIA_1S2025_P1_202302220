@@ -58,6 +58,9 @@ func Analyzer(input string) (string, error) {
 	case "mkfile":
 		// Llama a la función ParseMkfile del paquete commands con los argumentos restantes
 		return commands.ParseMkfile(tokens[1:])
+	case "mkgrp":
+		// Llama a la función ParseMkgrp del paquete commands con los argumentos restantes
+		return commands.ParseMkgrp(tokens[1:])
 	default:
 		if tokens[0][0] == '#' {
 			// Si el primer carácter del comando es '#', se considera un comentario
