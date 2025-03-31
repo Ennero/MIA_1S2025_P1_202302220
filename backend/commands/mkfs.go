@@ -18,10 +18,6 @@ type MKFS struct {
 	typ string // Tipo de formato (full)
 }
 
-/*
-   mkfs -id=vd1 -type=full
-   mkfs -id=vd2
-*/
 
 func ParseMkfs(tokens []string) (string, error) {
 	cmd := &MKFS{} // Crea una nueva instancia de MKFS
