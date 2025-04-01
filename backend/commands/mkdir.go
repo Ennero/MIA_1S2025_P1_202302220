@@ -20,46 +20,28 @@ type MKDIR struct {
 func ParseMkdir(tokens []string) (string, error) {
 	cmd := &MKDIR{} // Crea una nueva instancia de MKDIR
 
-	// Unir tokens en una sola cadena y luego dividir por espacios, respetando las comillas
+	// Unir tokens en una sola cadena
 	args := strings.Join(tokens, " ")
-	// Expresión regular para encontrar los parámetros del comando mkdir
-	re := regexp.MustCompile(`-path=[^\s]+|-p`)
-	// Encuentra todas las coincidencias de la expresión regular en la cadena de argumentos
-	matches := re.FindAllString(args, -1)
 
-	// Verificar que todos los tokens fueron reconocidos por la expresión regular
-	if len(matches) != len(tokens) {
-		// Identificar el parámetro inválido
-		for _, token := range tokens {
-			if !re.MatchString(token) {
-				return "", fmt.Errorf("parámetro inválido: %s", token)
-			}
-		}
+	// Expresión regular para capturar parámetros con y sin comillas
+	re := regexp.MustCompile(`-path="([^"]+)"|-path=([^\s]+)|-p`)
+
+	// Encuentra todas las coincidencias de la expresión regular en la cadena de argumentos
+	matches := re.FindAllStringSubmatch(args, -1)
+
+	// Verificar que se reconocieron todos los tokens correctamente
+	if matches == nil {
+		return "", errors.New("sintaxis inválida en los parámetros")
 	}
 
 	// Itera sobre cada coincidencia encontrada
 	for _, match := range matches {
-		// Divide cada parte en clave y valor usando "=" como delimitador
-		kv := strings.SplitN(match, "=", 2)
-		key := strings.ToLower(kv[0])
-
-		// Switch para manejar diferentes parámetros
-		switch key {
-		case "-path":
-			if len(kv) != 2 {
-				return "", fmt.Errorf("formato de parámetro inválido: %s", match)
-			}
-			value := kv[1]
-			// Remove quotes from value if present
-			if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
-				value = strings.Trim(value, "\"")
-			}
-			cmd.path = value
-		case "-p":
+		if match[1] != "" { // Coincidencia con comillas
+			cmd.path = match[1]
+		} else if match[2] != "" { // Coincidencia sin comillas
+			cmd.path = match[2]
+		} else if match[0] == "-p" {
 			cmd.p = true
-		default:
-			// Si el parámetro no es reconocido, devuelve un error
-			return "", fmt.Errorf("parámetro desconocido: %s", key)
 		}
 	}
 
@@ -68,14 +50,15 @@ func ParseMkdir(tokens []string) (string, error) {
 		return "", errors.New("faltan parámetros requeridos: -path")
 	}
 
-	// Aquí se puede agregar la lógica para ejecutar el comando mkdir con los parámetros proporcionados
+	// Ejecutar el comando mkdir
 	err := commandMkdir(cmd)
 	if err != nil {
 		return "", err
 	}
 
-	return fmt.Sprintf("MKDIR: Directorio %s creado correctamente.", cmd.path), nil // Devuelve el comando MKDIR creado
+	return fmt.Sprintf("MKDIR: Directorio %s creado correctamente.", cmd.path), nil
 }
+
 
 func commandMkdir(mkdir *MKDIR) error {
 	//Obtengo la parción Motada (como siempre)

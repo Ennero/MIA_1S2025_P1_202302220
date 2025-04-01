@@ -71,13 +71,20 @@ func CreateParentDirs(path string) error {
 	return nil
 }
 
-// getFileNames obtiene el nombre del archivo .dot y el nombre de la imagen de salida
 func GetFileNames(path string) (string, string) {
-	dir := filepath.Dir(path)
-	baseName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	dotFileName := filepath.Join(dir, baseName+".dot")
-	outputImage := path
-	return dotFileName, outputImage
+    // Limpiar el path 
+    cleanedPath := filepath.Clean(path)
+
+    //Extraer componentes del path
+    dir := filepath.Dir(cleanedPath)    
+    ext := filepath.Ext(cleanedPath)     
+    baseName := strings.TrimSuffix(filepath.Base(cleanedPath), ext) 
+
+    // Construir el nombre del archivo .dot
+    dotFileName := filepath.Join(dir, baseName+".dot") 
+    outputImage := filepath.Join(dir, baseName+ext) // /ruta/a/reporte.png
+
+    return dotFileName, outputImage
 }
 
 // GetParentDirectories obtiene las carpetas padres y el directorio de destino

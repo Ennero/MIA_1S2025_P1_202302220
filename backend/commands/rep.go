@@ -24,23 +24,8 @@ func ParseRep(tokens []string) (string, error) {
 	args := strings.Join(tokens, " ")
 	fmt.Printf("Argumentos REP completos: %s\n", args)
 
-	// Expresión regular que ya maneja path/path_file_ls con o sin comillas
-	re := regexp.MustCompile(`-(?i)(id|name|path|path_file_ls)=("[^"]+"|[^"]+)`)
-	/* Explicación de la Regex mejorada:
-	   - -(?i): Busca un guion literal. (?i) activa el modo case-insensitive para lo siguiente.
-	   - (id|name|path|path_file_ls): Captura (Grupo 1) el nombre del parámetro (ahora case-insensitive).
-	   - =: Busca un signo igual literal.
-	   - ( ... ): Captura (Grupo 2) el valor.
-	     - "[^"]+": Opción 1: Busca una comilla doble, seguida de uno o más caracteres que NO sean comilla doble, seguida de otra comilla doble.
-	     - |: O...
-	     - [^"\s]+: Opción 2: Busca uno o más caracteres que NO sean comilla doble NI espacio en blanco (para valores sin comillas).
-	       Nota: Usar [^"]+ directamente aquí podría capturar más de lo deseado si hay espacios después de un valor sin comillas.
-	             Ajuste a [^"\s]+ es un poco más seguro para valores sin comillas.
-	             O aún mejor: usar [^\s]+ si asumimos que los paths sin comillas no tienen espacios.
-	             Vamos a simplificar asumiendo que valores sin comillas no tienen espacios problemáticos: [^\s]+
-	*/
 	// Regex más simple y robusta si asumimos que los valores sin comillas no tienen espacios:
-	re = regexp.MustCompile(`-(?i)(id|name|path|path_file_ls)=("[^"]+"|[^\s]+)`)
+	re := regexp.MustCompile(`-(?i)(id|name|path|path_file_ls)=("[^"]+"|[^\s]+)`)
 
 	matches := re.FindAllStringSubmatch(args, -1) // Usar Submatch para capturar grupos
 	fmt.Printf("Coincidencias REP encontradas: %v\n", matches)
@@ -62,9 +47,10 @@ func ParseRep(tokens []string) (string, error) {
 			return "", fmt.Errorf("parámetro duplicado: -%s", key)
 		}
 
-		// Quitar comillas SIEMPRE si están presentes al inicio y final
-		if len(value) >= 2 && strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
-			value = strings.Trim(value, "\"")
+		// Quitar comillas dobles iniciales Y/O finales si existen
+		originalValueForDebug := value // Opcional: guardar para comparar en debug
+		value = strings.Trim(value, "\"")
+		if value != originalValueForDebug {
 			fmt.Printf("    Valor sin comillas: '%s'\n", value)
 		} else {
 			fmt.Printf("    Valor sin comillas (sin cambios): '%s'\n", value)
@@ -97,7 +83,7 @@ func ParseRep(tokens []string) (string, error) {
 		}
 	}
 
-	// Verifica que los parámetros obligatorios hayan sido proporcionados 
+	// Verifica que los parámetros obligatorios hayan sido proporcionados
 	if !processedKeys["id"] {
 		return "", errors.New("parámetro requerido faltante: -id")
 	}
@@ -114,7 +100,7 @@ func ParseRep(tokens []string) (string, error) {
 
 	err := commandRep(cmd)
 	if err != nil {
-		return "", err 
+		return "", err
 	}
 
 	successMsg := fmt.Sprintf("REP: Reporte generado exitosamente\n"+
@@ -208,6 +194,5 @@ func commandRep(rep *REP) error {
 		}
 
 	}
-
 	return nil
 }
