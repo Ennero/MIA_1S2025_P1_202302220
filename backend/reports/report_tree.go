@@ -17,7 +17,7 @@ func ReportTree(sb *structures.SuperBlock, diskPath string, outputPath string) e
 	if err != nil {
 		return fmt.Errorf("error creando directorios padre para reporte TREE: %v", err)
 	}
-	dotFileName, outputImage := utils.GetFileNames(outputPath)
+	dotFileName, outputSVG := utils.GetFileNames(outputPath)
 
 	// Maps para evitar duplicados
 	generatedNodes := make(map[string]bool)
@@ -34,10 +34,9 @@ func ReportTree(sb *structures.SuperBlock, diskPath string, outputPath string) e
 		fmt.Printf("Advertencia durante la generación del árbol: %v\n", err)
 		return fmt.Errorf("error generando el árbol de inodos: %v", err)
 	}
-
 	dotContent.WriteString("}\n")
 
-	// --- Guardar y Ejecutar Graphviz ---
+	// Guardar y Ejecutar Graphviz 
 	dotFile, err := os.Create(dotFileName)
 	if err != nil {
 		return fmt.Errorf("error al crear el archivo DOT para reporte TREE: %v", err)
@@ -50,14 +49,14 @@ func ReportTree(sb *structures.SuperBlock, diskPath string, outputPath string) e
 	}
 	fmt.Println("Archivo DOT generado:", dotFileName)
 
-	cmd := exec.Command("dot", "-Tpng", dotFileName, "-o", outputImage)
+	cmd := exec.Command("dot", "-Tsvg", dotFileName, "-o", outputSVG)
 	cmdOutput, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("Salida de Graphviz:\n%s\n", string(cmdOutput))
 		return fmt.Errorf("error al ejecutar Graphviz para reporte TREE: %v", err)
 	}
 
-	fmt.Println("Reporte TREE generado exitosamente:", outputImage)
+	fmt.Println("Reporte TREE generado exitosamente en formato SVG:", outputSVG)
 	return nil
 }
 

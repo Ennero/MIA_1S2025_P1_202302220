@@ -104,18 +104,17 @@ func ParseMkfile(tokens []string) (string, error) {
 	return fmt.Sprintf("MKFILE: Archivo '%s' creado correctamente.", cmd.path), nil
 }
 
-// commandMkfile contiene la lógica principal para crear el archivo
 func commandMkfile(mkfile *MKFILE) error {
-	//Obtener Autenticación y Partición Montada
-	var userID int32 = 1 
-	var groupID int32 = 1 
+	// Obtener Autenticación y Partición Montada
+	var userID int32 = 1
+	var groupID int32 = 1
 	var partitionID string
 
 	if stores.Auth.IsAuthenticated() {
 		partitionID = stores.Auth.GetPartitionID()
-		fmt.Printf("Usuario autenticado: %s (Usando UID=1, GID=1 por defecto)\n", stores.Auth.Username)
+		fmt.Printf("Usuario autenticado: %s (Usando UID=%d, GID=%d)\n", stores.Auth.Username, userID, groupID)
 	} else {
-		return errors.New("no se ha iniciado sesión en ninguna partición")
+		return errors.New("comando mkfile requiere sesión iniciada (login)")
 	}
 
 	partitionSuperblock, mountedPartition, partitionPath, err := stores.GetMountedPartitionSuperblock(partitionID)
@@ -123,9 +122,12 @@ func commandMkfile(mkfile *MKFILE) error {
 		return fmt.Errorf("error al obtener la partición montada '%s': %w", partitionID, err)
 	}
 
-	// Validar tamaños para división por cero
+	// Validar tamaños para división por cero o valores inválidos
 	if partitionSuperblock.S_inode_size <= 0 || partitionSuperblock.S_block_size <= 0 {
 		return fmt.Errorf("tamaño de inodo o bloque inválido en superbloque: inode=%d, block=%d", partitionSuperblock.S_inode_size, partitionSuperblock.S_block_size)
+	}
+	if partitionSuperblock.S_magic != 0xEF53 {
+		return fmt.Errorf("magia del superbloque inválida (0x%X), posible corrupción o formato incorrecto", partitionSuperblock.S_magic)
 	}
 
 	// Limpiar Path y Obtener Padre/Nombre
@@ -134,42 +136,45 @@ func commandMkfile(mkfile *MKFILE) error {
 		return errors.New("el path debe ser absoluto (empezar con /)")
 	}
 	if cleanPath == "/" {
-		return errors.New("no se puede crear archivo en la raíz '/' con este comando")
+		return errors.New("no se puede crear archivo en la raíz '/' con este comando, use un subdirectorio")
 	}
 	if cleanPath == "" {
 		return errors.New("el path no puede estar vacío")
 	}
 
 	parentPath := filepath.Dir(cleanPath)
-	fileName := filepath.Base(cleanPath)
-	if fileName == "" || fileName == "." || fileName == ".." {
-		return fmt.Errorf("nombre de archivo inválido: %s", fileName)
-	}
-	if len(fileName) > 12 {
-		return fmt.Errorf("el nombre del archivo '%s' excede los 12 caracteres permitidos", fileName)
+	if parentPath == "." || parentPath == "" {
+		parentPath = "/"
 	}
 
-	// Asegurar que el nombre no contenga caracteres inválidos
+	fileName := filepath.Base(cleanPath)
+	if fileName == "" || fileName == "." || fileName == ".." {
+		return fmt.Errorf("nombre de archivo inválido: '%s'", fileName)
+	}
+	if len(fileName) > 11 {
+		return fmt.Errorf("el nombre del archivo '%s' excede los 11 caracteres permitidos (máx 12 bytes con nulo)", fileName)
+	}
+
 	fmt.Printf("Asegurando directorio padre: %s\n", parentPath)
 	parentInodeIndex, parentInode, err := ensureParentDirExists(parentPath, mkfile.r, partitionSuperblock, partitionPath)
 	if err != nil {
-		return err 
+		return err
 	}
 
-	fmt.Printf("Verificando si '%s' ya existe en inodo %d...\n", fileName, parentInodeIndex)
+	// Verificar si el nombre ya existe en el padre
+	fmt.Printf("Verificando si '%s' ya existe en directorio padre (inodo %d)...\n", fileName, parentInodeIndex)
 	exists, _, existingInodeType := findEntryInParent(parentInode, fileName, partitionSuperblock, partitionPath)
 	if exists {
 		existingTypeStr := "elemento"
 		if existingInodeType == '0' {
 			existingTypeStr = "directorio"
-		}
-		if existingInodeType == '1' {
+		} else if existingInodeType == '1' {
 			existingTypeStr = "archivo"
 		}
 		return fmt.Errorf("error: el %s '%s' ya existe en '%s'", existingTypeStr, fileName, parentPath)
 	}
 
-	// Determinar Contenido y Tamaño
+	// Determinar Contenido y Tamaño Final
 	var contentBytes []byte
 	var fileSize int32
 
@@ -186,24 +191,31 @@ func commandMkfile(mkfile *MKFILE) error {
 		if fileSize > 0 {
 			fmt.Printf("Generando contenido de %d bytes (0-9 repetido)...\n", fileSize)
 			contentBuilder := strings.Builder{}
+			contentBuilder.Grow(int(fileSize))
 			for i := int32(0); i < fileSize; i++ {
 				contentBuilder.WriteByte(byte('0' + (i % 10)))
 			}
 			contentBytes = []byte(contentBuilder.String())
 		} else {
+			// Tamaño 0, archivo vacío
 			contentBytes = []byte{}
 		}
 	}
 	fmt.Printf("Tamaño final del archivo: %d bytes\n", fileSize)
 
-	// Calcular bloques necesarios 
+	// Calcular bloques necesarios
 	blockSize := partitionSuperblock.S_block_size
 	numBlocksNeeded := int32(0)
 	if fileSize > 0 {
+		// Manejo división por cero si blockSize fuera inválido (aunque ya se validó SB)
+		if blockSize <= 0 {
+			return errors.New("tamaño de bloque inválido en superbloque")
+		}
 		numBlocksNeeded = (fileSize + blockSize - 1) / blockSize
+	} else {
+		numBlocksNeeded = 0
 	}
 
-	// Asignar Bloques de Datos y Punteros
 	fmt.Printf("Asignando %d bloque(s) de datos y punteros necesarios...\n", numBlocksNeeded)
 	var allocatedBlockIndices [15]int32
 	allocatedBlockIndices, err = allocateDataBlocks(contentBytes, fileSize, partitionSuperblock, partitionPath)
@@ -213,24 +225,36 @@ func commandMkfile(mkfile *MKFILE) error {
 
 	// Asignar Inodo
 	fmt.Println("Asignando inodo...")
-	newInodeIndex := (partitionSuperblock.S_first_ino - partitionSuperblock.S_inode_start) / partitionSuperblock.S_inode_size
+	newInodeIndex, err := partitionSuperblock.FindFreeInode(partitionPath)
+	if err != nil {
+		return fmt.Errorf("no se pudo asignar un nuevo inodo: %w", err)
+	}
+
+	fmt.Printf("Inodo libre encontrado: %d\n", newInodeIndex)
 	err = partitionSuperblock.UpdateBitmapInode(partitionPath, newInodeIndex)
 	if err != nil {
 		return fmt.Errorf("error actualizando bitmap para inodo %d: %w", newInodeIndex, err)
 	}
-	partitionSuperblock.S_free_inodes_count--
-	partitionSuperblock.S_first_ino += partitionSuperblock.S_inode_size
+	partitionSuperblock.S_free_inodes_count-- // Decrementar contador global
 
 	// Crear y Serializar Estructura Inodo
 	currentTime := float32(time.Now().Unix())
 	newInode := &structures.Inode{
-		I_uid: userID, I_gid: groupID, I_size: fileSize,
-		I_atime: currentTime, I_ctime: currentTime, I_mtime: currentTime,
-		I_type: [1]byte{'1'}, I_perm: [3]byte{'6', '6', '4'},
+		I_uid:   userID,
+		I_gid:   groupID,
+		I_size:  fileSize,
+		I_atime: currentTime,
+		I_ctime: currentTime,
+		I_mtime: currentTime,
+		I_type:  [1]byte{'1'},           // '1' para archivo
+		I_perm:  [3]byte{'6', '6', '4'}, // Permisos rw-rw-r--
 	}
+	// Copiar los índices de bloques asignados
 	newInode.I_block = allocatedBlockIndices
 
+	// Calcular offset y serializar
 	inodeOffset := int64(partitionSuperblock.S_inode_start) + int64(newInodeIndex)*int64(partitionSuperblock.S_inode_size)
+	fmt.Printf("Serializando nuevo inodo %d en offset %d...\n", newInodeIndex, inodeOffset)
 	err = newInode.Serialize(partitionPath, inodeOffset)
 	if err != nil {
 		return fmt.Errorf("error serializando nuevo inodo %d: %w", newInodeIndex, err)
@@ -243,12 +267,13 @@ func commandMkfile(mkfile *MKFILE) error {
 		return fmt.Errorf("error añadiendo entrada '%s' al directorio padre: %w", fileName, err)
 	}
 
-	// Serializar Superbloque
 	fmt.Println("\nSerializando SuperBlock después de MKFILE...")
 	err = partitionSuperblock.Serialize(partitionPath, int64(mountedPartition.Part_start))
 	if err != nil {
-		return fmt.Errorf("error al serializar el superbloque después de mkfile: %w", err)
+		return fmt.Errorf("ADVERTENCIA: error al serializar el superbloque después de mkfile, los cambios podrían perderse (%w)", err)
 	}
+
+	fmt.Println("MKFILE completado exitosamente.")
 	return nil
 }
 
@@ -266,7 +291,7 @@ func ensureParentDirExists(targetParentPath string, createRecursively bool, sb *
 		if inode.I_type[0] != '0' {
 			return -1, nil, errors.New("error crítico: inodo raíz (0) no es un directorio")
 		}
-		return 0, inode, nil 
+		return 0, inode, nil
 	}
 
 	// Verificar si el padre objetivo ya existe
@@ -365,6 +390,7 @@ func findEntryInParent(parentInode *structures.Inode, entryName string, sb *stru
 	return
 }
 
+
 func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex int32, sb *structures.SuperBlock, partitionPath string) error {
 
 	parentInode := &structures.Inode{}
@@ -376,115 +402,119 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 		return fmt.Errorf("el inodo padre %d no es un directorio", parentInodeIndex)
 	}
 
-	// Buscar slot libre en bloques existentes
 	fmt.Printf("Buscando slot libre en bloques existentes del padre %d...\n", parentInodeIndex)
-	// Función auxiliar para buscar en un bloque carpeta
+
 	findAndAddInFolderBlock := func(blockPtr int32) (bool, error) {
 		if blockPtr == -1 {
 			return false, nil
-		} // No es un bloque válido
+		} 
 		if blockPtr < 0 || blockPtr >= sb.S_blocks_count {
 			fmt.Printf("Advertencia: Puntero inválido %d encontrado al buscar slot libre.\n", blockPtr)
-			return false, nil // Saltar puntero inválido
+			return false, nil 
 		}
 
 		folderBlock := &structures.FolderBlock{}
 		blockOffset := int64(sb.S_block_start) + int64(blockPtr)*int64(sb.S_block_size)
 		if err := folderBlock.Deserialize(partitionPath, blockOffset); err != nil {
-			fmt.Printf("Advertencia: No se pudo leer bloque %d del padre %d para añadir entrada\n", blockPtr, parentInodeIndex)
+			fmt.Printf("Advertencia: No se pudo leer bloque %d del padre %d para añadir entrada: %v\n", blockPtr, parentInodeIndex, err)
 			return false, nil
 		}
 
 		for i := 0; i < len(folderBlock.B_content); i++ {
-			nameBytes := folderBlock.B_content[i].B_name[:]
-			isDot := (nameBytes[0] == '.' && (len(nameBytes) < 2 || nameBytes[1] == 0))
-			isDotDot := (nameBytes[0] == '.' && nameBytes[1] == '.' && (len(nameBytes) < 3 || nameBytes[2] == 0))
-
-			if folderBlock.B_content[i].B_inodo == -1 && !isDot && !isDotDot { // Slot libre encontrado!
+			if folderBlock.B_content[i].B_inodo == -1 { // Slot libre encontrado!
 				fmt.Printf("Encontrado slot libre %d en bloque existente %d del padre %d\n", i, blockPtr, parentInodeIndex)
 				folderBlock.B_content[i].B_inodo = entryInodeIndex
-				copy(folderBlock.B_content[i].B_name[:], entryName)
+				var cleanName [12]byte
+				copy(cleanName[:], entryName)
+				folderBlock.B_content[i].B_name = cleanName
+
 				if err := folderBlock.Serialize(partitionPath, blockOffset); err != nil { // Serializar bloque modificado
 					return false, fmt.Errorf("falló al escribir la nueva entrada en el bloque existente %d: %w", blockPtr, err)
 				}
 				// Actualizar tiempos del padre y serializar padre
 				currentTime := float32(time.Now().Unix())
 				parentInode.I_mtime = currentTime
-				parentInode.I_atime = currentTime
+				parentInode.I_atime = currentTime // Acceso también cuenta como modificación aquí? O solo mtime? Usamos ambos por ahora.
 				if err := parentInode.Serialize(partitionPath, parentOffset); err != nil {
-					return false, fmt.Errorf("falló al actualizar tiempos del inodo padre %d tras añadir en bloque existente: %w", parentInodeIndex, err)
+					// Esto es menos grave que fallar al escribir la entrada, pero loguear
+					fmt.Printf("Advertencia: falló al actualizar tiempos del inodo padre %d tras añadir en bloque %d: %v\n", parentInodeIndex, blockPtr, err)
 				}
-				return true, nil
+				return true, nil // Slot encontrado y usado
 			}
 		}
-		return false, nil
-	}
+		return false, nil 
+	} 
 
 	// Buscar en bloques directos
 	for k := 0; k < 12; k++ {
 		found, err := findAndAddInFolderBlock(parentInode.I_block[k])
 		if err != nil {
 			return err
-		} 
+		}
 		if found {
 			return nil
 		} 
 	}
 
-	// Buscar en bloques apuntados por indirecto simple
 	if parentInode.I_block[12] != -1 {
 		fmt.Printf("Buscando slot libre en bloques de indirección simple (L1 en %d)...\n", parentInode.I_block[12])
 		l1Block := &structures.PointerBlock{}
-		l1Offset := int64(sb.S_block_start) + int64(parentInode.I_block[12])*int64(sb.S_block_size)
-		if err := l1Block.Deserialize(partitionPath, l1Offset); err == nil {
-			for _, folderBlockPtr := range l1Block.P_pointers {
-				found, err := findAndAddInFolderBlock(folderBlockPtr)
-				if err != nil {
-					return err
-				}
-				if found {
-					return nil
-				}
-			}
+		l1BlockIndex := parentInode.I_block[12]
+		// Validar índice L1
+		if l1BlockIndex < 0 || l1BlockIndex >= sb.S_blocks_count {
+			fmt.Printf("Advertencia: Puntero indirecto simple (I_block[12]) inválido: %d\n", l1BlockIndex)
 		} else {
-			fmt.Printf("Advertencia: No se pudo leer el bloque de punteros L1 %d\n", parentInode.I_block[12])
+			l1Offset := int64(sb.S_block_start) + int64(l1BlockIndex)*int64(sb.S_block_size)
+			if err := l1Block.Deserialize(partitionPath, l1Offset); err == nil {
+				for _, folderBlockPtr := range l1Block.P_pointers { // Iterar punteros L2 (que apuntan a FolderBlocks)
+					found, err := findAndAddInFolderBlock(folderBlockPtr)
+					if err != nil {
+						return err
+					}
+					if found {
+						return nil
+					}
+				}
+			} else {
+				fmt.Printf("Advertencia: No se pudo leer el bloque de punteros L1 %d: %v\n", l1BlockIndex, err)
+			}
 		}
 	}
+	// --- Si no se encontró slot, asignar NUEVO bloque al padre ---
+	fmt.Printf("No se encontró slot libre en bloques existentes del padre %d. Buscando puntero libre para nuevo bloque...\n", parentInodeIndex)
 
-	//Si no se encontró slot, buscar un PUNTERO libre para un NUEVO bloque
-	fmt.Printf("No se encontró slot libre en bloques existentes del padre %d. Buscando puntero libre...\n", parentInodeIndex)
-
-	// Función auxiliar para asignar y preparar un nuevo bloque carpeta
+	// --- Función auxiliar interna CORREGIDA ---
 	allocateAndPrepareNewFolderBlock := func() (int32, *structures.FolderBlock, error) {
 		if sb.S_free_blocks_count < 1 {
 			return -1, nil, errors.New("no hay bloques libres para expandir directorio")
 		}
-		// Asignar bloque
-		newBlockIndex := (sb.S_first_blo - sb.S_block_start) / sb.S_block_size
-		if newBlockIndex >= sb.S_blocks_count {
-			return -1, nil, errors.New("error interno: S_first_blo fuera de límites al asignar nuevo bloque")
+
+		newBlockIndex, err := sb.FindFreeBlock(partitionPath)
+		if err != nil {
+			return -1, nil, fmt.Errorf("error al buscar bloque libre para expandir dir: %w", err)
 		}
+		// FindFreeBlock ya valida el índice devuelto
+
 		// Actualizar bitmap y SB
-		err := sb.UpdateBitmapBlock(partitionPath, newBlockIndex)
+		err = sb.UpdateBitmapBlock(partitionPath, newBlockIndex)
 		if err != nil {
 			return -1, nil, fmt.Errorf("error bitmap para nuevo bloque dir %d: %w", newBlockIndex, err)
 		}
 		sb.S_free_blocks_count--
-		sb.S_first_blo += sb.S_block_size
+
 		// Crear, inicializar y serializar bloque vacío
 		newFolderBlock := &structures.FolderBlock{}
-		for i := range newFolderBlock.B_content {
-			newFolderBlock.B_content[i].B_inodo = -1
-		}
+		newFolderBlock.Initialize() // Usar el método Initialize
+
 		newBlockOffset := int64(sb.S_block_start) + int64(newBlockIndex)*int64(sb.S_block_size)
 		if err := newFolderBlock.Serialize(partitionPath, newBlockOffset); err != nil {
 			return -1, nil, fmt.Errorf("falló al inicializar/serializar nuevo bloque dir %d: %w", newBlockIndex, err)
 		}
 		fmt.Printf("Nuevo bloque carpeta vacío asignado y serializado en índice %d\n", newBlockIndex)
-		return newBlockIndex, newFolderBlock, nil // Devuelve índice Y el bloque en memoria
-	}
+		return newBlockIndex, newFolderBlock, nil 
+	} 
 
-	// Buscar en punteros directos
+	// Buscar puntero libre en bloques directos
 	for k := 0; k < 12; k++ {
 		if parentInode.I_block[k] == -1 {
 			fmt.Printf("Encontrado puntero directo libre en I_block[%d]. Asignando nuevo bloque carpeta...\n", k)
@@ -492,7 +522,6 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 			if err != nil {
 				return err
 			}
-
 			// Actualizar inodo padre para apuntar al nuevo bloque
 			parentInode.I_block[k] = newBlockIndex
 			currentTime := float32(time.Now().Unix())
@@ -502,41 +531,43 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 				return fmt.Errorf("falló al actualizar I_block[%d] del padre %d: %w", k, parentInodeIndex, err)
 			}
 
-			// Añadir entrada al nuevo bloque 
-			// Usar índice 0 porque está recién creado y vacío 
-			newFolderBlock.B_content[0].B_inodo = entryInodeIndex
-			copy(newFolderBlock.B_content[0].B_name[:], entryName)
+			// Añadir entrada al nuevo bloque (que está en memoria via newFolderBlock)
+			newFolderBlock.B_content[0].B_inodo = entryInodeIndex // Usar índice 0
+			var cleanName [12]byte
+			copy(cleanName[:], entryName)
+			newFolderBlock.B_content[0].B_name = cleanName
+
 			newBlockOffset := int64(sb.S_block_start) + int64(newBlockIndex)*int64(sb.S_block_size)
 			if err := newFolderBlock.Serialize(partitionPath, newBlockOffset); err != nil { // Sobrescribir con la entrada añadida
 				return fmt.Errorf("falló al serializar nuevo bloque dir %d con la entrada: %w", newBlockIndex, err)
 			}
 			fmt.Printf("Nueva entrada '%s' -> %d añadida al nuevo bloque %d vía puntero directo.\n", entryName, entryInodeIndex, newBlockIndex)
-			return nil
+			return nil // Éxito
 		}
 	}
 
-	// Buscar en puntero indirecto simple
-	fmt.Println("Punteros directos llenos. Verificando indirección simple (I_block[12])...")
+	// Buscar/Crear puntero en indirecto simple (L1)
+	fmt.Println("Punteros directos llenos. Verificando/Creando indirección simple (I_block[12])...")
 	l1Ptr := parentInode.I_block[12]
-	var l1Block *structures.PointerBlock
-	var l1BlockIndex int32
+	var l1Block *structures.PointerBlock 
+	var l1BlockIndex int32               
 
 	if l1Ptr == -1 { // Necesitamos crear el bloque L1
 		fmt.Println("I_block[12] no existe. Creando bloque de punteros L1...")
-		if sb.S_free_blocks_count < 2 { // Necesitamos espacio para L1 y para el nuevo FolderBlock
+		// Necesitamos 2 bloques: uno para L1 y otro para el FolderBlock
+		if sb.S_free_blocks_count < 2 {
 			return errors.New("no hay suficientes bloques libres para crear bloque L1 y bloque de carpeta")
 		}
 		// Asignar bloque L1
-		l1BlockIndex = (sb.S_first_blo - sb.S_block_start) / sb.S_block_size
-		if l1BlockIndex >= sb.S_blocks_count {
-			return errors.New("error interno: S_first_blo fuera de límites al asignar L1")
-		}
-		err := sb.UpdateBitmapBlock(partitionPath, l1BlockIndex)
+		l1Index, err := sb.FindFreeBlock(partitionPath)
 		if err != nil {
-			return fmt.Errorf("error bitmap para bloque L1 %d: %w", l1BlockIndex, err)
+			return fmt.Errorf("error buscando bloque para L1: %w", err)
+		}
+		if err = sb.UpdateBitmapBlock(partitionPath, l1Index); err != nil {
+			return fmt.Errorf("error bitmap L1 %d: %w", l1Index, err)
 		}
 		sb.S_free_blocks_count--
-		sb.S_first_blo += sb.S_block_size
+		l1BlockIndex = l1Index
 
 		// Actualizar inodo padre y serializarlo
 		parentInode.I_block[12] = l1BlockIndex
@@ -546,15 +577,20 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 		if err := parentInode.Serialize(partitionPath, parentOffset); err != nil {
 			return fmt.Errorf("falló al actualizar I_block[12] del padre %d: %w", parentInodeIndex, err)
 		}
-
-		// Crear e inicializar bloque L1 en memoria
 		l1Block = &structures.PointerBlock{}
 		for i := range l1Block.P_pointers {
 			l1Block.P_pointers[i] = -1
 		}
+		l1Offset := int64(sb.S_block_start) + int64(l1BlockIndex)*int64(sb.S_block_size)
+		if err := l1Block.Serialize(partitionPath, l1Offset); err != nil {
+			return fmt.Errorf("falló al inicializar/serializar bloque L1 %d: %w", l1BlockIndex, err)
+		}
 		fmt.Printf("Bloque punteros L1 creado en índice %d\n", l1BlockIndex)
-	} else { // El bloque L1 ya existe
+	} else {
 		l1BlockIndex = l1Ptr
+		if l1BlockIndex < 0 || l1BlockIndex >= sb.S_blocks_count {
+			return fmt.Errorf("puntero indirecto simple (I_block[12]) inválido: %d", l1BlockIndex)
+		}
 		fmt.Printf("Bloque punteros L1 ya existe en índice %d. Cargando...\n", l1BlockIndex)
 		l1Block = &structures.PointerBlock{}
 		l1Offset := int64(sb.S_block_start) + int64(l1BlockIndex)*int64(sb.S_block_size)
@@ -563,7 +599,6 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 		}
 	}
 
-	// Buscar un slot libre (-1) en el bloque L1
 	foundL1PointerSlot := -1
 	for k := 0; k < len(l1Block.P_pointers); k++ {
 		if l1Block.P_pointers[k] == -1 {
@@ -574,7 +609,7 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 
 	if foundL1PointerSlot != -1 {
 		fmt.Printf("Encontrado puntero libre en L1[%d]. Asignando nuevo bloque carpeta...\n", foundL1PointerSlot)
-		// Asignar el nuevo bloque carpeta (ya verifica espacio libre)
+		// Asignar el nuevo bloque carpeta 
 		newBlockIndex, newFolderBlock, err := allocateAndPrepareNewFolderBlock()
 		if err != nil {
 			return err
@@ -587,9 +622,13 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 			return fmt.Errorf("falló al serializar bloque puntero L1 %d actualizado: %w", l1BlockIndex, err)
 		}
 
-		// Añadir entrada al nuevo bloque carpeta
-		newFolderBlock.B_content[0].B_inodo = entryInodeIndex
-		copy(newFolderBlock.B_content[0].B_name[:], entryName)
+		// Añadir entrada al nuevo bloque carpeta (que está en memoria)
+		newFolderBlock.B_content[0].B_inodo = entryInodeIndex // Usar slot 0
+		var cleanName [12]byte
+		copy(cleanName[:], entryName)
+		newFolderBlock.B_content[0].B_name = cleanName
+
+		// Serializar el nuevo bloque carpeta con la entrada
 		newBlockOffset := int64(sb.S_block_start) + int64(newBlockIndex)*int64(sb.S_block_size)
 		if err := newFolderBlock.Serialize(partitionPath, newBlockOffset); err != nil {
 			return fmt.Errorf("falló al serializar nuevo bloque dir %d con la entrada: %w", newBlockIndex, err)
@@ -597,27 +636,32 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 		fmt.Printf("Nueva entrada '%s' -> %d añadida al nuevo bloque %d vía puntero indirecto simple.\n", entryName, entryInodeIndex, newBlockIndex)
 		return nil
 	}
-
 	return fmt.Errorf("directorio padre (inodo %d) lleno: no hay espacio en bloques existentes ni en punteros directos/indirectos simples. Indirección doble/triple no implementada para directorios", parentInodeIndex)
 }
 
 func allocateDataBlocks(contentBytes []byte, fileSize int32, sb *structures.SuperBlock, partitionPath string) ([15]int32, error) {
-	allocatedBlockIndices := [15]int32{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1} // Inicializar I_block con -1
+	allocatedBlockIndices := [15]int32{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}
 
 	if fileSize == 0 {
-		return allocatedBlockIndices, nil // No se necesitan bloques
+		return allocatedBlockIndices, nil
 	}
 
 	blockSize := sb.S_block_size
+	if blockSize <= 0 {
+		return allocatedBlockIndices, errors.New("tamaño de bloque inválido en superbloque al asignar bloques")
+	}
 	numBlocksNeeded := (fileSize + blockSize - 1) / blockSize
 
 	fmt.Printf("Allocate: Necesitando %d bloques para %d bytes (tamaño bloque: %d)\n", numBlocksNeeded, fileSize, blockSize)
 
 	directLimit := int32(12)
-	simpleLimit := directLimit + 16                                      // 12 + 16 = 28
-	doubleLimit := simpleLimit + 16*16                                   // 28 + 256 = 284
-	tripleLimit := doubleLimit + 16*16*16                                // 284 + 4096 = 4380
-	pointersPerBlock := int32(len(structures.PointerBlock{}.P_pointers)) // = 16
+	pointersPerBlock := int32(len(structures.PointerBlock{}.P_pointers))
+	if pointersPerBlock <= 0 {
+		return allocatedBlockIndices, errors.New("cálculo inválido de punteros por bloque")
+	}
+	simpleLimit := directLimit + pointersPerBlock
+	doubleLimit := simpleLimit + pointersPerBlock*pointersPerBlock
+	tripleLimit := doubleLimit + pointersPerBlock*pointersPerBlock*pointersPerBlock
 
 	if numBlocksNeeded > tripleLimit {
 		return allocatedBlockIndices, fmt.Errorf("el archivo es demasiado grande (%d bloques), excede el límite de indirección triple (%d bloques)", numBlocksNeeded, tripleLimit)
@@ -627,30 +671,29 @@ func allocateDataBlocks(contentBytes []byte, fileSize int32, sb *structures.Supe
 	}
 
 	// Variables para bloques indirectos
-	var indirect1Block *structures.PointerBlock = nil // Simple
+	var indirect1Block *structures.PointerBlock = nil // Simple L1
 	var indirect1BlockIndex int32 = -1
-	var indirect2Blocks [16]*structures.PointerBlock = [16]*structures.PointerBlock{}                               // Doble L2
-	var indirect2BlockIndices [16]int32 = [16]int32{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1} // Indices L2
-	var indirect2L1Block *structures.PointerBlock = nil                                                             // Doble L1
+	var indirect2Blocks [16]*structures.PointerBlock = [16]*structures.PointerBlock{}
+	var indirect2BlockIndices [16]int32 = [16]int32{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}
+	var indirect2L1Block *structures.PointerBlock = nil
 	var indirect2L1BlockIndex int32 = -1
-	// Similar para triple (más complejo)
 
-	//Bucle Principal de Asignación
 	for b := int32(0); b < numBlocksNeeded; b++ {
-		dataBlockIndex := (sb.S_first_blo - sb.S_block_start) / sb.S_block_size
-		if dataBlockIndex >= sb.S_blocks_count {
-			return allocatedBlockIndices, errors.New("error interno: S_first_blo fuera de límites al asignar bloque de datos")
+		dataBlockIndex, err := sb.FindFreeBlock(partitionPath)
+		if err != nil {
+			return allocatedBlockIndices, fmt.Errorf("no se encontró bloque de datos libre (necesitaba el bloque #%d de %d): %w", b+1, numBlocksNeeded, err)
 		}
 
+		fmt.Printf("Allocate: Bloque libre encontrado: %d (para bloque de datos #%d)\n", dataBlockIndex, b)
+
 		// Actualizar bitmap y SB para el bloque de DATOS
-		err := sb.UpdateBitmapBlock(partitionPath, dataBlockIndex)
+		err = sb.UpdateBitmapBlock(partitionPath, dataBlockIndex)
 		if err != nil {
 			return allocatedBlockIndices, fmt.Errorf("error bitmap bloque datos %d: %w", dataBlockIndex, err)
 		}
-		sb.S_free_blocks_count--
-		sb.S_first_blo += sb.S_block_size
+		sb.S_free_blocks_count-- // Decrementar contador
 
-		// Escribir datos en el bloque 
+		// Escribir datos en el bloque
 		fileBlock := &structures.FileBlock{}
 		start := b * blockSize
 		end := start + blockSize
@@ -658,7 +701,7 @@ func allocateDataBlocks(contentBytes []byte, fileSize int32, sb *structures.Supe
 			end = fileSize
 		}
 		bytesToWrite := contentBytes[start:end]
-		copy(fileBlock.B_content[:], bytesToWrite)
+		copy(fileBlock.B_content[:], bytesToWrite) // Copia hasta 64 bytes
 		blockOffset := int64(sb.S_block_start) + int64(dataBlockIndex)*int64(sb.S_block_size)
 		err = fileBlock.Serialize(partitionPath, blockOffset)
 		if err != nil {
@@ -672,52 +715,57 @@ func allocateDataBlocks(contentBytes []byte, fileSize int32, sb *structures.Supe
 			continue
 		}
 
-		// Indirecto Simple (12-27)
+		// Indirecto Simple (12 hasta simpleLimit-1)
 		if b < simpleLimit {
-			idxInSimple := b - directLimit // Índice dentro del bloque de punteros simple (0-15)
+			idxInSimple := b - directLimit // Índice dentro del bloque de punteros simple (0 a pointersPerBlock-1)
 			fmt.Printf("Allocate: Bloque datos %d necesita ir en Indirecto Simple (idx %d)\n", dataBlockIndex, idxInSimple)
 
-			// Asignar el bloque de punteros L1 si es la primera vez
+			// Asignar el bloque de punteros L1 (Simple) si es la primera vez
 			if indirect1Block == nil {
 				fmt.Println("Allocate: Asignando Bloque Punteros L1 (Simple)...")
-				indirect1BlockIndex = (sb.S_first_blo - sb.S_block_start) / sb.S_block_size
-				if indirect1BlockIndex >= sb.S_blocks_count {
-					return allocatedBlockIndices, errors.New("error interno: S_first_blo fuera de límites al asignar puntero L1")
+				indirect1BlockIndex, err = sb.FindFreeBlock(partitionPath)
+				if err != nil {
+					return allocatedBlockIndices, fmt.Errorf("no se pudo asignar bloque para punteros L1 (Simple): %w", err)
 				}
 
 				err = sb.UpdateBitmapBlock(partitionPath, indirect1BlockIndex)
 				if err != nil {
 					return allocatedBlockIndices, fmt.Errorf("error bitmap bloque punteros L1 %d: %w", indirect1BlockIndex, err)
 				}
-				sb.S_free_blocks_count-- // ¡Contar este bloque también!
-				sb.S_first_blo += sb.S_block_size
+				sb.S_free_blocks_count--
 
 				allocatedBlockIndices[12] = indirect1BlockIndex // Guardar en el inodo
 				indirect1Block = &structures.PointerBlock{}     // Crear struct en memoria
-				for i := range indirect1Block.P_pointers {
+				for i := range indirect1Block.P_pointers {      // Inicializar punteros a -1
 					indirect1Block.P_pointers[i] = -1
 				}
-				fmt.Printf("Allocate: Bloque Punteros L1 (Simple) asignado al índice %d\n", indirect1BlockIndex)
+				// Serializar el bloque L1 vacío AHORA
+				offsetL1 := int64(sb.S_block_start) + int64(indirect1BlockIndex)*int64(sb.S_block_size)
+				err = indirect1Block.Serialize(partitionPath, offsetL1)
+				if err != nil {
+					return allocatedBlockIndices, fmt.Errorf("error serializando bloque puntero L1 simple INICIAL %d: %w", indirect1BlockIndex, err)
+				}
+				fmt.Printf("Allocate: Bloque Punteros L1 (Simple) asignado al índice %d y serializado vacío\n", indirect1BlockIndex)
 			}
 			// Guardar puntero al bloque de datos en el struct del bloque de punteros L1
 			indirect1Block.P_pointers[idxInSimple] = dataBlockIndex
-			fmt.Printf("Allocate: Puntero a datos %d guardado en P_pointers[%d] del Bloque L1 (Simple)\n", dataBlockIndex, idxInSimple)
+			fmt.Printf("Allocate: Puntero a datos %d guardado en P_pointers[%d] del Bloque L1 (Simple) en memoria\n", dataBlockIndex, idxInSimple)
 			continue
 		}
 
-		// Indirecto Doble (28-283)
+		// Indirecto Doble (simpleLimit hasta doubleLimit-1)
 		if b < doubleLimit {
-			relIdxDouble := b - simpleLimit          // Índice relativo al inicio del doble indirecto (0-255)
-			idxL1 := relIdxDouble / pointersPerBlock // Índice en el bloque L1 (0-15)
-			idxL2 := relIdxDouble % pointersPerBlock // Índice en el bloque L2 (0-15)
+			relIdxDouble := b - simpleLimit          // Índice relativo al inicio del doble indirecto (0 a pointersPerBlock*pointersPerBlock-1)
+			idxL1 := relIdxDouble / pointersPerBlock // Índice en el bloque L1 (0 a pointersPerBlock-1)
+			idxL2 := relIdxDouble % pointersPerBlock // Índice en el bloque L2 (0 a pointersPerBlock-1)
 			fmt.Printf("Allocate: Bloque datos %d necesita ir en Indirecto Doble (L1[%d], L2[%d])\n", dataBlockIndex, idxL1, idxL2)
 
-			// Asignar el bloque de punteros L1 si es la primera vez para Doble
+			// Asignar el bloque de punteros L1 (Doble) si es la primera vez
 			if indirect2L1Block == nil {
 				fmt.Println("Allocate: Asignando Bloque Punteros L1 (Doble)...")
-				indirect2L1BlockIndex = (sb.S_first_blo - sb.S_block_start) / sb.S_block_size
-				if indirect2L1BlockIndex >= sb.S_blocks_count {
-					return allocatedBlockIndices, errors.New("error interno: S_first_blo fuera de límites al asignar puntero L1 doble")
+				indirect2L1BlockIndex, err = sb.FindFreeBlock(partitionPath)
+				if err != nil {
+					return allocatedBlockIndices, fmt.Errorf("no se pudo asignar bloque para punteros L1 (Doble): %w", err)
 				}
 
 				err = sb.UpdateBitmapBlock(partitionPath, indirect2L1BlockIndex)
@@ -725,22 +773,27 @@ func allocateDataBlocks(contentBytes []byte, fileSize int32, sb *structures.Supe
 					return allocatedBlockIndices, fmt.Errorf("error bitmap bloque punteros L1 doble %d: %w", indirect2L1BlockIndex, err)
 				}
 				sb.S_free_blocks_count--
-				sb.S_first_blo += sb.S_block_size
 
 				allocatedBlockIndices[13] = indirect2L1BlockIndex // Guardar en el inodo
 				indirect2L1Block = &structures.PointerBlock{}
 				for i := range indirect2L1Block.P_pointers {
 					indirect2L1Block.P_pointers[i] = -1
 				}
-				fmt.Printf("Allocate: Bloque Punteros L1 (Doble) asignado al índice %d\n", indirect2L1BlockIndex)
+				// Serializar L1 doble vacío
+				offsetL1D := int64(sb.S_block_start) + int64(indirect2L1BlockIndex)*int64(sb.S_block_size)
+				err = indirect2L1Block.Serialize(partitionPath, offsetL1D)
+				if err != nil {
+					return allocatedBlockIndices, fmt.Errorf("error serializando bloque puntero L1 doble INICIAL %d: %w", indirect2L1BlockIndex, err)
+				}
+				fmt.Printf("Allocate: Bloque Punteros L1 (Doble) asignado al índice %d y serializado vacío\n", indirect2L1BlockIndex)
 			}
 
 			// Asignar el bloque de punteros L2 si es la primera vez para este índice L1
 			if indirect2Blocks[idxL1] == nil {
 				fmt.Printf("Allocate: Asignando Bloque Punteros L2 (para L1[%d])...\n", idxL1)
-				blockIndexL2 := (sb.S_first_blo - sb.S_block_start) / sb.S_block_size
-				if blockIndexL2 >= sb.S_blocks_count {
-					return allocatedBlockIndices, errors.New("error interno: S_first_blo fuera de límites al asignar puntero L2")
+				blockIndexL2, err := sb.FindFreeBlock(partitionPath)
+				if err != nil {
+					return allocatedBlockIndices, fmt.Errorf("no se pudo asignar bloque para punteros L2 (idxL1=%d): %w", idxL1, err)
 				}
 
 				err = sb.UpdateBitmapBlock(partitionPath, blockIndexL2)
@@ -748,35 +801,40 @@ func allocateDataBlocks(contentBytes []byte, fileSize int32, sb *structures.Supe
 					return allocatedBlockIndices, fmt.Errorf("error bitmap bloque punteros L2 %d: %w", blockIndexL2, err)
 				}
 				sb.S_free_blocks_count--
-				sb.S_first_blo += sb.S_block_size
 
-				indirect2L1Block.P_pointers[idxL1] = blockIndexL2   // Guardar puntero a L2 en L1
+				indirect2L1Block.P_pointers[idxL1] = blockIndexL2   // Guardar puntero a L2 en L1 (en memoria)
 				indirect2Blocks[idxL1] = &structures.PointerBlock{} // Crear struct L2 en memoria
-				indirect2BlockIndices[idxL1] = blockIndexL2         // Guardar índice L2
+				indirect2BlockIndices[idxL1] = blockIndexL2         // Guardar índice L2 para serialización posterior
 				for i := range indirect2Blocks[idxL1].P_pointers {
 					indirect2Blocks[idxL1].P_pointers[i] = -1
 				}
-				fmt.Printf("Allocate: Bloque Punteros L2 asignado al índice %d (guardado en L1[%d])\n", blockIndexL2, idxL1)
+				// Serializar L2 vacío ahora
+				offsetL2 := int64(sb.S_block_start) + int64(blockIndexL2)*int64(sb.S_block_size)
+				err = indirect2Blocks[idxL1].Serialize(partitionPath, offsetL2)
+				if err != nil {
+					return allocatedBlockIndices, fmt.Errorf("error serializando bloque puntero L2 INICIAL %d: %w", blockIndexL2, err)
+				}
+
+				fmt.Printf("Allocate: Bloque Punteros L2 asignado al índice %d (guardado en L1[%d]) y serializado vacío\n", blockIndexL2, idxL1)
 
 				// Serializar L1 AHORA porque cambió su puntero a L2
 				offsetL1 := int64(sb.S_block_start) + int64(indirect2L1BlockIndex)*int64(sb.S_block_size)
 				err = indirect2L1Block.Serialize(partitionPath, offsetL1)
 				if err != nil {
-					return allocatedBlockIndices, fmt.Errorf("error serializando bloque puntero L1 doble %d: %w", indirect2L1BlockIndex, err)
+					return allocatedBlockIndices, fmt.Errorf("error serializando bloque puntero L1 doble %d tras añadir puntero a L2: %w", indirect2L1BlockIndex, err)
 				}
 			}
 
-			// Guardar puntero al bloque de datos en el struct del bloque de punteros L2 correspondiente
+			// Guardar puntero al bloque de datos en el struct del bloque de punteros L2 correspondiente (en memoria)
 			indirect2Blocks[idxL1].P_pointers[idxL2] = dataBlockIndex
-			fmt.Printf("Allocate: Puntero a datos %d guardado en P_pointers[%d] del Bloque L2 (índice %d)\n", dataBlockIndex, idxL2, indirect2BlockIndices[idxL1])
+			fmt.Printf("Allocate: Puntero a datos %d guardado en P_pointers[%d] del Bloque L2 (índice %d) en memoria\n", dataBlockIndex, idxL2, indirect2BlockIndices[idxL1])
 			continue
 		}
 
-		// Indirecto Triple (284 - 4379) que no haré
+		//No lo haré xd
 		if b < tripleLimit {
 			return allocatedBlockIndices, fmt.Errorf("la indirección triple (bloque %d) no está implementada", b)
 		}
-
 	}
 
 	// Serializar Bloques de Punteros Pendientes
@@ -785,24 +843,24 @@ func allocateDataBlocks(contentBytes []byte, fileSize int32, sb *structures.Supe
 		offset := int64(sb.S_block_start) + int64(indirect1BlockIndex)*int64(sb.S_block_size)
 		err := indirect1Block.Serialize(partitionPath, offset)
 		if err != nil {
-			return allocatedBlockIndices, fmt.Errorf("error serializando bloque puntero L1 simple %d: %w", indirect1BlockIndex, err)
+			return allocatedBlockIndices, fmt.Errorf("error serializando bloque puntero L1 simple final %d: %w", indirect1BlockIndex, err)
 		}
 	}
 	// Serializar L2 para Doble
 	if indirect2L1Block != nil { // Si se usó doble indirección
-		// Necesitamos serializar CADA bloque L2 que fue modificado
 		for idxL1 := 0; idxL1 < len(indirect2Blocks); idxL1++ {
-			if indirect2Blocks[idxL1] != nil {
-				idxL2 := indirect2BlockIndices[idxL1]
-				fmt.Printf("Allocate: Serializando Bloque Punteros L2 final %d (desde L1[%d])\n", idxL2, idxL1)
-				offsetL2 := int64(sb.S_block_start) + int64(idxL2)*int64(sb.S_block_size)
+			if indirect2Blocks[idxL1] != nil { // Si este bloque L2 fue creado/usado
+				idxL2Block := indirect2BlockIndices[idxL1] 
+				fmt.Printf("Allocate: Serializando Bloque Punteros L2 final %d (desde L1[%d])\n", idxL2Block, idxL1)
+				offsetL2 := int64(sb.S_block_start) + int64(idxL2Block)*int64(sb.S_block_size)
 				err := indirect2Blocks[idxL1].Serialize(partitionPath, offsetL2)
 				if err != nil {
-					return allocatedBlockIndices, fmt.Errorf("error serializando bloque puntero L2 %d: %w", idxL2, err)
+					return allocatedBlockIndices, fmt.Errorf("error serializando bloque puntero L2 final %d: %w", idxL2Block, err)
 				}
 			}
 		}
-		// El bloque L1 ya se serializó cuando se añadieron punteros L2
 	}
+
+	fmt.Println("Allocate: Asignación de bloques de datos completada.")
 	return allocatedBlockIndices, nil
 }

@@ -1,12 +1,11 @@
 package structures
 
 import (
-	"fmt" // Añadido para formateo de errores más detallado
+	"fmt"
 	"os"
 )
 
-// CreateBitMaps crea los Bitmaps de inodos y bloques en el archivo especificado,
-// inicializándolos como libres ('0').
+// inicializando como libres 
 func (sb *SuperBlock) CreateBitMaps(path string) error {
 	// Abrir archivo para escritura, creándolo si no existe
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
@@ -27,15 +26,13 @@ func (sb *SuperBlock) CreateBitMaps(path string) error {
 		return fmt.Errorf("error al buscar inicio de bitmap de inodos (offset %d): %w", sb.S_bm_inode_start, err)
 	}
 
-	// CORRECCIÓN: El tamaño del buffer debe ser el número TOTAL de inodos (sb.S_inodes_count).
-	//             El valor inicial '0' indica que están libres.
+	//libre
 	inodeBitmapBuffer := make([]byte, sb.S_inodes_count)
 	for i := range inodeBitmapBuffer {
 		inodeBitmapBuffer[i] = '0' // '0' representa un inodo libre
 	}
 
 	// Escribir el buffer del bitmap de inodos en el archivo
-	// Usamos Write directamente en lugar de binary.Write para buffers de bytes simples
 	bytesWritten, err := file.Write(inodeBitmapBuffer)
 	if err != nil {
 		return fmt.Errorf("error al escribir bitmap de inodos: %w", err)
@@ -44,7 +41,6 @@ func (sb *SuperBlock) CreateBitMaps(path string) error {
 		return fmt.Errorf("escritura incompleta del bitmap de inodos (escritos %d, esperados %d)", bytesWritten, len(inodeBitmapBuffer))
 	}
 
-	// --- Bitmap de bloques ---
 	// Validar que el conteo de bloques sea positivo
 	if sb.S_blocks_count <= 0 {
 		return fmt.Errorf("el número total de bloques (S_blocks_count) es inválido: %d", sb.S_blocks_count)
@@ -55,11 +51,10 @@ func (sb *SuperBlock) CreateBitMaps(path string) error {
 		return fmt.Errorf("error al buscar inicio de bitmap de bloques (offset %d): %w", sb.S_bm_block_start, err)
 	}
 
-	// CORRECCIÓN: El tamaño del buffer debe ser el número TOTAL de bloques (sb.S_blocks_count).
-	//             Usaremos '0' para indicar libre, igual que con los inodos.
+	//libre
 	blockBitmapBuffer := make([]byte, sb.S_blocks_count)
 	for i := range blockBitmapBuffer {
-		blockBitmapBuffer[i] = '0' // '0' representa un bloque libre
+		blockBitmapBuffer[i] = '0'
 	}
 
 	// Escribir el buffer del bitmap de bloques en el archivo
@@ -71,12 +66,11 @@ func (sb *SuperBlock) CreateBitMaps(path string) error {
 		return fmt.Errorf("escritura incompleta del bitmap de bloques (escritos %d, esperados %d)", bytesWritten, len(blockBitmapBuffer))
 	}
 
-	// fmt.Println("Bitmaps creados e inicializados correctamente.") // Mensaje opcional
+	fmt.Println("Bitmaps creados e inicializados correctamente.")
 	return nil
 }
 
-// ActualizarBitmapInode marca el inodo en el índice especificado como ocupado ('1').
-// CORRECCIÓN: Se añadió el parámetro 'inodeIndex' para indicar QUÉ inodo actualizar.
+// Marca el inodo en el índice especificado como ocupado 
 func (sb *SuperBlock) UpdateBitmapInode(path string, inodeIndex int32) error {
 	// Validación del índice proporcionado
 	if inodeIndex < 0 || inodeIndex >= sb.S_inodes_count {
@@ -90,31 +84,27 @@ func (sb *SuperBlock) UpdateBitmapInode(path string, inodeIndex int32) error {
 	}
 	defer file.Close()
 
-	// CORRECCIÓN: Calcular el offset EXACTO dentro del bitmap para el índice dado.
-	//             Cada inodo ocupa 1 byte en el bitmap.
+	// Calcular el offset EXACTO dentro del bitmap para el índice dado.
 	offset := int64(sb.S_bm_inode_start) + int64(inodeIndex)
 	_, err = file.Seek(offset, 0)
 	if err != nil {
 		return fmt.Errorf("error al buscar posición %d en bitmap de inodos: %w", offset, err)
 	}
 
-	// Escribir el byte '1' (ocupado) en la posición calculada.
+	// Escribir el byte ocupado en la posición calculada.
 	bytesWritten, err := file.Write([]byte{'1'})
 	if err != nil {
 		return fmt.Errorf("error al escribir '1' en bitmap de inodos en índice %d (offset %d): %w", inodeIndex, offset, err)
 	}
-	// Verificar que se escribió exactamente 1 byte
 	if bytesWritten != 1 {
 		return fmt.Errorf("error al actualizar bitmap de inodos: se esperaban escribir 1 byte pero se escribieron %d", bytesWritten)
 	}
 
-	// fmt.Printf("Bitmap de inodo actualizado en índice: %d\n", inodeIndex) // Mensaje opcional
+	fmt.Printf("Bitmap de inodo actualizado en índice: %d\n", inodeIndex)
 	return nil
 }
 
-// ActualizarBitmapBlock marca el bloque en el índice especificado como ocupado ('1').
-// CORRECCIÓN: Se añadió el parámetro 'blockIndex' para indicar QUÉ bloque actualizar.
-// CORRECCIÓN: Se cambió el carácter de ocupado de 'X' a '1' para consistencia.
+// UpdateBitmapBlock marca el bloque en el índice especificado como ocupado
 func (sb *SuperBlock) UpdateBitmapBlock(path string, blockIndex int32) error {
 	// Validación del índice proporcionado
 	if blockIndex < 0 || blockIndex >= sb.S_blocks_count {
@@ -128,8 +118,7 @@ func (sb *SuperBlock) UpdateBitmapBlock(path string, blockIndex int32) error {
 	}
 	defer file.Close()
 
-	// CORRECCIÓN: Calcular el offset EXACTO dentro del bitmap para el índice dado.
-	//             Cada bloque ocupa 1 byte en el bitmap.
+	// Calcular el offset EXACTO dentro del bitmap para el índice dado.
 	offset := int64(sb.S_bm_block_start) + int64(blockIndex)
 	_, err = file.Seek(offset, 0)
 	if err != nil {
@@ -137,7 +126,6 @@ func (sb *SuperBlock) UpdateBitmapBlock(path string, blockIndex int32) error {
 	}
 
 	// Escribir el byte '1' (ocupado) en la posición calculada.
-	// Usamos '1' para mantener consistencia (0 = libre, 1 = ocupado).
 	bytesWritten, err := file.Write([]byte{'1'})
 	if err != nil {
 		return fmt.Errorf("error al escribir '1' en bitmap de bloques en índice %d (offset %d): %w", blockIndex, offset, err)

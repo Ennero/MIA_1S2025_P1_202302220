@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"strings"
 )
 
 type FolderBlock struct {
@@ -82,12 +83,24 @@ func (fb *FolderBlock) Deserialize(path string, offset int64) error {
 	return nil
 }
 
-// Print imprime los atributos del bloque de carpeta
+// Print imprime el contenido del bloque de carpeta
 func (fb *FolderBlock) Print() {
+	fmt.Println("  Contenido del FolderBlock:")
 	for i, content := range fb.B_content {
-		name := string(content.B_name[:])
-		fmt.Printf("Content %d:\n", i+1)
-		fmt.Printf("  B_name: %s\n", name)
-		fmt.Printf("  B_inodo: %d\n", content.B_inodo)
+		// Solo imprimir entradas válidas (inodo != -1)
+		if content.B_inodo != -1 {
+			name := strings.TrimRight(string(content.B_name[:]), "\x00") // Limpiar nulos para mostrar
+			fmt.Printf("    [%d] Nombre: %-12q Inodo: %d\n", i, name, content.B_inodo)
+		} else {
+			fmt.Printf("    [%d] (Slot Libre)\n", i)
+		}
+	}
+}
+
+
+func (fb *FolderBlock) Initialize() {
+	for i := range fb.B_content {
+		fb.B_content[i].B_inodo = -1 //lot libre
+		fb.B_content[i].B_name = [12]byte{}
 	}
 }
