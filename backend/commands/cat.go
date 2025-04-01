@@ -5,69 +5,74 @@ import (
 	structures "backend/structures"
 	"errors"
 	"fmt"
-	"regexp" // Paquete para trabajar con expresiones regulares, útil para encontrar y manipular patrones en cadenas
+	"regexp"
 	"strings"
 )
 
 func ParseCat(tokens []string) (string, error) {
-	// Verificar que se proporcionó un parámetro
+	// Verificar que se proporcionó al menos un argumento
 	if len(tokens) == 0 {
-		return "", fmt.Errorf("faltan parámetros requeridos")
+		return "", fmt.Errorf("faltan parámetros: se requiere al menos un argumento -fileN=[/ruta | \"/ruta\"]")
 	}
 
-	// Unir tokens en una sola cadena y luego dividir por espacios, respetando las comillas
+	// Unir tokens en una sola cadena 
 	args := strings.Join(tokens, " ")
-	fmt.Printf("Argumentos completos: %s\n", args)
+	fmt.Printf("Argumentos completos para cat: %s\n", args)
 
-	//Expresión regular para encontrar todos los path
-	re := regexp.MustCompile(`-file\d+="([^"]+)"`)
+	re := regexp.MustCompile(`-file\d+=([^\s]+)`)
 
-	// Buscar todas las coincidencias
+	// Buscar todas las coincidencias y subcoincidencias
 	matches := re.FindAllStringSubmatch(args, -1)
-	fmt.Printf("Coincidencias encontradas: %v\n", matches)
+	fmt.Printf("Coincidencias con formato -fileN=... encontradas: %v\n", matches)
 
-	// Extraer los paths en una lista
+	// Si no se encontró NINGUNA coincidencia con el formato esperado
+	if len(matches) == 0 {
+		return "", fmt.Errorf("no se encontraron argumentos con el formato -fileN=[/ruta | \"/ruta\"]")
+	}
+
 	var paths []string
+
+	// Extraer los paths de los grupos capturados
 	for _, match := range matches {
 		if len(match) > 1 {
-			path := match[1]
-			// Asegurarse de que el path comience con /
+			value := match[1] // Valor crudo
+			fmt.Printf("  Valor extraído de '%s': '%s'\n", match[0], value)
+
+			path := value
+			// Verificar si el valor capturado empieza Y termina con comillas dobles
+			if len(path) >= 2 && strings.HasPrefix(path, "\"") && strings.HasSuffix(path, "\"") {
+				path = strings.Trim(path, "\"")
+				fmt.Printf("    Path sin comillas: '%s'\n", path)
+			}
+
+			if path == "" {
+				return "", fmt.Errorf("el path proporcionado en '%s' no puede ser vacío después de quitar comillas", match[0])
+			}
+
 			if !strings.HasPrefix(path, "/") {
-				path = "/" + path
+				return "", fmt.Errorf("el path '%s' (de '%s') debe ser absoluto (empezar con /)", path, match[0])
 			}
 			paths = append(paths, path)
+		} else {
+			fmt.Printf("  Advertencia: Coincidencia inválida encontrada (sin grupo capturado?): %v\n", match)
 		}
 	}
 
-	// Si no se encontraron paths con el formato -fileN="path", intentar usar los tokens directamente
+	// Si hubo matches pero no se extrajeron paths válidos (muy raro con esta lógica)
 	if len(paths) == 0 {
-		for _, token := range tokens {
-			// Eliminar comillas si están presentes
-			path := strings.Trim(token, "\"'")
-			// Asegurarse de que el path comience con /
-			if !strings.HasPrefix(path, "/") {
-				path = "/" + path
-			}
-			paths = append(paths, path)
-		}
+		return "", fmt.Errorf("no se pudieron extraer rutas válidas de los argumentos proporcionados")
 	}
 
-	fmt.Println("---------------------------------")
-	fmt.Println(paths)
+	fmt.Println("Paths finales a procesar:", paths)
 
-	// Si aún no hay paths, reportar error
-	if len(paths) == 0 {
-		return "", fmt.Errorf("no se encontraron paths válidos en los argumentos")
-	}
-
+	// Llamar a la lógica del comando con los paths extraídos
 	texto, err := commandCat(paths)
-
 	if err != nil {
-		return "", err
+		return "", err 
 	}
 
-	// Devolver el contenido del archivo
-	return fmt.Sprintf("CAT: Contenido de el/los archivo:\n%s", texto), nil
+	finalOutput := strings.TrimSuffix(texto, "\n")
+	return fmt.Sprintf("CAT: Contenido de el/los archivo(s):\n%s", finalOutput), nil
 }
 
 func commandCat(paths []string) (string, error) {

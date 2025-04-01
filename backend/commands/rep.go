@@ -18,98 +18,117 @@ type REP struct {
 	path_file_ls string // Ruta del archivo ls (opcional)
 }
 
-// ParserRep parsea el comando rep y devuelve una instancia de REP
 func ParseRep(tokens []string) (string, error) {
-	cmd := &REP{} // Crea una nueva instancia de REP
+	cmd := &REP{}
 
-	// Unir tokens en una sola cadena y luego dividir por espacios, respetando las comillas
 	args := strings.Join(tokens, " ")
-	// Expresión regular para encontrar los parámetros del comando rep
-	re := regexp.MustCompile(`-id=[^\s]+|-path="[^"]+"|-path=[^\s]+|-name=[^\s]+|-path_file_ls="[^"]+"|-path_file_ls=[^\s]+`)
-	// Encuentra todas las coincidencias de la expresión regular en la cadena de argumentos
-	matches := re.FindAllString(args, -1)
+	fmt.Printf("Argumentos REP completos: %s\n", args)
 
-	// Itera sobre cada coincidencia encontrada
+	// Expresión regular que ya maneja path/path_file_ls con o sin comillas
+	re := regexp.MustCompile(`-(?i)(id|name|path|path_file_ls)=("[^"]+"|[^"]+)`)
+	/* Explicación de la Regex mejorada:
+	   - -(?i): Busca un guion literal. (?i) activa el modo case-insensitive para lo siguiente.
+	   - (id|name|path|path_file_ls): Captura (Grupo 1) el nombre del parámetro (ahora case-insensitive).
+	   - =: Busca un signo igual literal.
+	   - ( ... ): Captura (Grupo 2) el valor.
+	     - "[^"]+": Opción 1: Busca una comilla doble, seguida de uno o más caracteres que NO sean comilla doble, seguida de otra comilla doble.
+	     - |: O...
+	     - [^"\s]+: Opción 2: Busca uno o más caracteres que NO sean comilla doble NI espacio en blanco (para valores sin comillas).
+	       Nota: Usar [^"]+ directamente aquí podría capturar más de lo deseado si hay espacios después de un valor sin comillas.
+	             Ajuste a [^"\s]+ es un poco más seguro para valores sin comillas.
+	             O aún mejor: usar [^\s]+ si asumimos que los paths sin comillas no tienen espacios.
+	             Vamos a simplificar asumiendo que valores sin comillas no tienen espacios problemáticos: [^\s]+
+	*/
+	// Regex más simple y robusta si asumimos que los valores sin comillas no tienen espacios:
+	re = regexp.MustCompile(`-(?i)(id|name|path|path_file_ls)=("[^"]+"|[^\s]+)`)
+
+	matches := re.FindAllStringSubmatch(args, -1) // Usar Submatch para capturar grupos
+	fmt.Printf("Coincidencias REP encontradas: %v\n", matches)
+
+	processedKeys := make(map[string]bool) // Para evitar parámetros duplicados
+
 	for _, match := range matches {
-		// Divide cada parte en clave y valor usando "=" como delimitador
-		kv := strings.SplitN(match, "=", 2)
-		if len(kv) != 2 {
-			return "", fmt.Errorf("formato de parámetro inválido: %s", match)
-		}
-		key, value := strings.ToLower(kv[0]), kv[1]
+		if len(match) < 3 {
+			continue
+		} // Asegurarse que hay suficientes grupos capturados
 
-		// Remove quotes from value if present
-		if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
+		key := strings.ToLower(match[1]) // Obtener el nombre del parámetro (ya en minúsculas por (?i) pero ToLower asegura)
+		value := match[2]                // Obtener el valor capturado (puede tener comillas)
+
+		fmt.Printf("  Procesando: key='%s', raw_value='%s'\n", key, value)
+
+		// Verificar si la clave ya fue procesada
+		if processedKeys[key] {
+			return "", fmt.Errorf("parámetro duplicado: -%s", key)
+		}
+
+		// Quitar comillas SIEMPRE si están presentes al inicio y final
+		if len(value) >= 2 && strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
 			value = strings.Trim(value, "\"")
+			fmt.Printf("    Valor sin comillas: '%s'\n", value)
+		} else {
+			fmt.Printf("    Valor sin comillas (sin cambios): '%s'\n", value)
 		}
 
-		// Switch para manejar diferentes parámetros
+		// Validar valor vacío después de quitar comillas (excepto para flags si los hubiera)
+		if value == "" && key != "algun_flag_sin_valor" { // Añadir flags aquí si existen
+			return "", fmt.Errorf("el valor para el parámetro -%s no puede estar vacío", key)
+		}
 		switch key {
-		case "-id":
-			// Verifica que el id no esté vacío
-			if value == "" {
-				return "", errors.New("el id no puede estar vacío")
-			}
+		case "id":
 			cmd.id = value
-		case "-path":
-			// Verifica que el path no esté vacío
-			if value == "" {
-				return "", errors.New("el path no puede estar vacío")
-			}
+			processedKeys["id"] = true
+		case "path":
 			cmd.path = value
-		case "-name":
-			// Verifica que el nombre sea uno de los valores permitidos
+			processedKeys["path"] = true
+		case "name":
+			nameLower := strings.ToLower(value) // Convertir valor a minúsculas para comparación
 			validNames := []string{"mbr", "disk", "inode", "block", "bm_inode", "bm_block", "sb", "file", "ls", "tree"}
-			if !contains(validNames, value) {
-				return "", errors.New("nombre inválido, debe ser uno de los siguientes: mbr, disk, inode, block, bm_inode, bm_block, sb, file, ls, tree")
+			if !slices.Contains(validNames, nameLower) {
+				return "", fmt.Errorf("valor inválido para -name: '%s'. Debe ser uno de: %s", value, strings.Join(validNames, ", "))
 			}
-			cmd.name = value
-		case "-path_file_ls":
+			cmd.name = nameLower
+			processedKeys["name"] = true
+		case "path_file_ls":
 			cmd.path_file_ls = value
+			processedKeys["path_file_ls"] = true
 		default:
-			// Si el parámetro no es reconocido, devuelve un error
-			return "", fmt.Errorf("parámetro desconocido: %s", key)
+			return "", fmt.Errorf("parámetro desconocido detectado internamente: %s", key)
 		}
 	}
 
-	// Verifica que los parámetros obligatorios hayan sido proporcionados
-	if cmd.id == "" || cmd.path == "" || cmd.name == "" {
-		return "", errors.New("faltan parámetros requeridos: -id, -path, -name")
+	// Verifica que los parámetros obligatorios hayan sido proporcionados 
+	if !processedKeys["id"] {
+		return "", errors.New("parámetro requerido faltante: -id")
+	}
+	if !processedKeys["path"] {
+		return "", errors.New("parámetro requerido faltante: -path")
+	}
+	if !processedKeys["name"] {
+		return "", errors.New("parámetro requerido faltante: -name")
 	}
 
-	if cmd.name == "file" && cmd.path_file_ls == "" {
-		return "", errors.New("el parámetro -path_file_ls es requerido para el reporte 'file'")
+	if (cmd.name == "file" || cmd.name == "ls") && !processedKeys["path_file_ls"] {
+		return "", fmt.Errorf("el parámetro -path_file_ls es requerido para el reporte '%s'", cmd.name)
 	}
 
-	if cmd.name == "ls" && cmd.path_file_ls == "" {
-		return "", errors.New("el parámetro -path_file_ls es requerido para el reporte 'ls'")
-	}
-
-	// Aquí se puede agregar la lógica para ejecutar el comando rep con los parámetros proporcionados
 	err := commandRep(cmd)
 	if err != nil {
-		fmt.Println("Error:", err)
-		return "", err
+		return "", err 
 	}
 
-	return fmt.Sprintf("REP: Reporte generado exitosamente\n"+
+	successMsg := fmt.Sprintf("REP: Reporte generado exitosamente\n"+
 		"-> ID: %s\n"+
 		"-> Path: %s\n"+
-		"-> Tipo: %s%s",
+		"-> Tipo: %s",
 		cmd.id,
 		cmd.path,
 		cmd.name,
-		func() string {
-			if cmd.path_file_ls != "" {
-				return fmt.Sprintf("\n-> Path LS: %s", cmd.path_file_ls)
-			}
-			return ""
-		}()), nil
-}
-
-// Función auxiliar para verificar si un valor está en una lista
-func contains(list []string, value string) bool {
-	return slices.Contains(list, value)
+	)
+	if cmd.path_file_ls != "" {
+		successMsg += fmt.Sprintf("\n-> Path LS/File: %s", cmd.path_file_ls)
+	}
+	return successMsg, nil
 }
 
 func commandRep(rep *REP) error {
@@ -172,7 +191,7 @@ func commandRep(rep *REP) error {
 		err = reports.ReportTree(mountedSb, mountedDiskPath, rep.path)
 		if err != nil {
 			fmt.Printf("Error: %v\n", err)
-			return	 err
+			return err
 		}
 
 	case "file":

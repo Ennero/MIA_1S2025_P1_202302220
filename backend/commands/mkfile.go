@@ -421,7 +421,7 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 		}
 
 		for i := 0; i < len(folderBlock.B_content); i++ {
-			if folderBlock.B_content[i].B_inodo == -1 { // Slot libre encontrado!
+			if folderBlock.B_content[i].B_inodo == -1 { // Slot libre encontrado
 				fmt.Printf("Encontrado slot libre %d en bloque existente %d del padre %d\n", i, blockPtr, parentInodeIndex)
 				folderBlock.B_content[i].B_inodo = entryInodeIndex
 				var cleanName [12]byte
@@ -434,9 +434,8 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 				// Actualizar tiempos del padre y serializar padre
 				currentTime := float32(time.Now().Unix())
 				parentInode.I_mtime = currentTime
-				parentInode.I_atime = currentTime // Acceso también cuenta como modificación aquí? O solo mtime? Usamos ambos por ahora.
+				parentInode.I_atime = currentTime 
 				if err := parentInode.Serialize(partitionPath, parentOffset); err != nil {
-					// Esto es menos grave que fallar al escribir la entrada, pero loguear
 					fmt.Printf("Advertencia: falló al actualizar tiempos del inodo padre %d tras añadir en bloque %d: %v\n", parentInodeIndex, blockPtr, err)
 				}
 				return true, nil // Slot encontrado y usado
@@ -480,7 +479,7 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 			}
 		}
 	}
-	// --- Si no se encontró slot, asignar NUEVO bloque al padre ---
+	//  Si no se encontró slot, asignar NUEVO bloque al padre 
 	fmt.Printf("No se encontró slot libre en bloques existentes del padre %d. Buscando puntero libre para nuevo bloque...\n", parentInodeIndex)
 
 	// --- Función auxiliar interna CORREGIDA ---
@@ -734,9 +733,9 @@ func allocateDataBlocks(contentBytes []byte, fileSize int32, sb *structures.Supe
 				}
 				sb.S_free_blocks_count--
 
-				allocatedBlockIndices[12] = indirect1BlockIndex // Guardar en el inodo
-				indirect1Block = &structures.PointerBlock{}     // Crear struct en memoria
-				for i := range indirect1Block.P_pointers {      // Inicializar punteros a -1
+				allocatedBlockIndices[12] = indirect1BlockIndex
+				indirect1Block = &structures.PointerBlock{}   
+				for i := range indirect1Block.P_pointers {    
 					indirect1Block.P_pointers[i] = -1
 				}
 				// Serializar el bloque L1 vacío AHORA
@@ -755,9 +754,9 @@ func allocateDataBlocks(contentBytes []byte, fileSize int32, sb *structures.Supe
 
 		// Indirecto Doble (simpleLimit hasta doubleLimit-1)
 		if b < doubleLimit {
-			relIdxDouble := b - simpleLimit          // Índice relativo al inicio del doble indirecto (0 a pointersPerBlock*pointersPerBlock-1)
-			idxL1 := relIdxDouble / pointersPerBlock // Índice en el bloque L1 (0 a pointersPerBlock-1)
-			idxL2 := relIdxDouble % pointersPerBlock // Índice en el bloque L2 (0 a pointersPerBlock-1)
+			relIdxDouble := b - simpleLimit     
+			idxL1 := relIdxDouble / pointersPerBlock 
+			idxL2 := relIdxDouble % pointersPerBlock 
 			fmt.Printf("Allocate: Bloque datos %d necesita ir en Indirecto Doble (L1[%d], L2[%d])\n", dataBlockIndex, idxL1, idxL2)
 
 			// Asignar el bloque de punteros L1 (Doble) si es la primera vez
@@ -774,7 +773,7 @@ func allocateDataBlocks(contentBytes []byte, fileSize int32, sb *structures.Supe
 				}
 				sb.S_free_blocks_count--
 
-				allocatedBlockIndices[13] = indirect2L1BlockIndex // Guardar en el inodo
+				allocatedBlockIndices[13] = indirect2L1BlockIndex 
 				indirect2L1Block = &structures.PointerBlock{}
 				for i := range indirect2L1Block.P_pointers {
 					indirect2L1Block.P_pointers[i] = -1
