@@ -135,22 +135,27 @@ func commandMkfile(mkfile *MKFILE) error {
 	if !strings.HasPrefix(cleanPath, "/") {
 		return errors.New("el path debe ser absoluto (empezar con /)")
 	}
+	//Limpiar el path de caracteres inválidos
 	if cleanPath == "/" {
 		return errors.New("no se puede crear archivo en la raíz '/' con este comando, use un subdirectorio")
 	}
+	// Verificar que no haya caracteres inválidos
 	if cleanPath == "" {
 		return errors.New("el path no puede estar vacío")
 	}
 
+	// Verificar que no haya caracteres inválidos
 	parentPath := filepath.Dir(cleanPath)
 	if parentPath == "." || parentPath == "" {
 		parentPath = "/"
 	}
 
+	// Verificar que el padre no sea la raíz
 	fileName := filepath.Base(cleanPath)
 	if fileName == "" || fileName == "." || fileName == ".." {
 		return fmt.Errorf("nombre de archivo inválido: '%s'", fileName)
 	}
+	// Verificar que el nombre no contenga la cantidad de caracteres inválidos
 	if len(fileName) > 11 {
 		return fmt.Errorf("el nombre del archivo '%s' excede los 11 caracteres permitidos (máx 12 bytes con nulo)", fileName)
 	}
@@ -178,6 +183,7 @@ func commandMkfile(mkfile *MKFILE) error {
 	var contentBytes []byte
 	var fileSize int32
 
+	// Leer contenido desde archivo local o generar contenido
 	if mkfile.cont != "" {
 		fmt.Printf("Leyendo contenido desde archivo local: %s\n", mkfile.cont)
 		hostContent, errRead := os.ReadFile(mkfile.cont)
@@ -187,7 +193,9 @@ func commandMkfile(mkfile *MKFILE) error {
 		contentBytes = hostContent
 		fileSize = int32(len(contentBytes))
 	} else {
+		// Generar contenido basado en el tamaño
 		fileSize = int32(mkfile.size)
+
 		if fileSize > 0 {
 			fmt.Printf("Generando contenido de %d bytes (0-9 repetido)...\n", fileSize)
 			contentBuilder := strings.Builder{}
@@ -216,6 +224,7 @@ func commandMkfile(mkfile *MKFILE) error {
 		numBlocksNeeded = 0
 	}
 
+	// Verificar si hay suficientes bloques libres
 	fmt.Printf("Asignando %d bloque(s) de datos y punteros necesarios...\n", numBlocksNeeded)
 	var allocatedBlockIndices [15]int32
 	allocatedBlockIndices, err = allocateDataBlocks(contentBytes, fileSize, partitionSuperblock, partitionPath)
@@ -230,6 +239,7 @@ func commandMkfile(mkfile *MKFILE) error {
 		return fmt.Errorf("no se pudo asignar un nuevo inodo: %w", err)
 	}
 
+	// Validar índice de inodo
 	fmt.Printf("Inodo libre encontrado: %d\n", newInodeIndex)
 	err = partitionSuperblock.UpdateBitmapInode(partitionPath, newInodeIndex)
 	if err != nil {
@@ -267,6 +277,7 @@ func commandMkfile(mkfile *MKFILE) error {
 		return fmt.Errorf("error añadiendo entrada '%s' al directorio padre: %w", fileName, err)
 	}
 
+	// Serializar el contenido en los bloques asignados
 	fmt.Println("\nSerializando SuperBlock después de MKFILE...")
 	err = partitionSuperblock.Serialize(partitionPath, int64(mountedPartition.Part_start))
 	if err != nil {
@@ -638,6 +649,7 @@ func addEntryToParent(parentInodeIndex int32, entryName string, entryInodeIndex 
 	return fmt.Errorf("directorio padre (inodo %d) lleno: no hay espacio en bloques existentes ni en punteros directos/indirectos simples. Indirección doble/triple no implementada para directorios", parentInodeIndex)
 }
 
+// allocateDataBlocks asigna bloques de datos para un archivo, actualizando el superbloque y el bitmap.1
 func allocateDataBlocks(contentBytes []byte, fileSize int32, sb *structures.SuperBlock, partitionPath string) ([15]int32, error) {
 	allocatedBlockIndices := [15]int32{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}
 
